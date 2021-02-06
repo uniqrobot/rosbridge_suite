@@ -307,11 +307,12 @@ def main(args=None):
     # spin_callback = PeriodicCallback(lambda: rclpy.spin_once(rosbridge_websocket_node, timeout_sec=0.01), 1)
     # spin_callback.start()
     # start_hook()
-    rate = rosbridge_websocket_client_node.create_rate(1)
+    # rate = rosbridge_websocket_client_node.create_rate(1)
     try:
-        while rclpy.ok():
-            rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01)
-            rate.sleep()
+        # while rclpy.ok():
+        #     rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01)
+        #     rate.sleep()
+        rclpy.spin(rosbridge_websocket_client_node)
     except KeyboardInterrupt:
         pass
 
