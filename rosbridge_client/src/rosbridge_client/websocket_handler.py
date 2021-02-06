@@ -73,7 +73,7 @@ def log_exceptions(f):
 
 
 class RosbridgeWebSocketClient(WebSocketClient):
-    client_id_seed = 0
+    client_id_seed = 1
     # clients_connected = 0
     # authenticate = False
     # use_compression = False
