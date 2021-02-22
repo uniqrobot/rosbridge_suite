@@ -41,18 +41,20 @@ import threading
 import traceback
 from functools import partial, wraps
 
-from tornado import version_info as tornado_version_info
-from tornado.ioloop import IOLoop
-from tornado.iostream import StreamClosedError
-from tornado.websocket import WebSocketHandler, WebSocketClosedError
-from tornado.gen import coroutine, BadYieldError
+from twisted.python import log
+from twisted.internet import interfaces, reactor
+from twisted.internet.protocol import ReconnectingClientFactory
+from zope.interface import implementer
+
+from autobahn.twisted.websocket import WebSocketClientFactory, \
+    WebSocketClientProtocol
 
 from rosbridge_library.rosbridge_protocol import RosbridgeProtocol
 from rosbridge_library.util import json, bson
 
-from std_msgs.msg import Int32
+# from std_msgs.msg import Int32
 
-from ws4py.client.threadedclient import WebSocketClient
+# from ws4py.client.threadedclient import WebSocketClient
 
 def _log_exception():
     """Log the most recent exception to ROS."""
@@ -71,9 +73,47 @@ def log_exceptions(f):
             raise
     return wrapper
 
+@implementer(interfaces.IPushProducer)
+class OutgoingValve:
+    """Allows the Autobahn transport to pause outgoing messages from rosbridge.
+    
+    The purpose of this valve is to connect backpressure from the WebSocket client
+    back to the rosbridge protocol, which depends on backpressure for queueing.
+    Without this flow control, rosbridge will happily keep writing messages to
+    the WebSocket until the system runs out of memory.
 
-class RosbridgeWebSocketClient(WebSocketClient):
-    client_id_seed = 1
+    This valve is closed and opened automatically by the Twisted TCP server.
+    In practice, Twisted should only close the valve when its userspace write buffer
+    is full and it should only open the valve when that buffer is empty.
+
+    When the valve is closed, the rosbridge protocol instance's outgoing writes
+    must block until the valve is opened.
+    """
+    def __init__(self, proto):
+        self._proto = proto
+        self._valve = threading.Event()
+        self._finished = False
+
+    @log_exceptions
+    def relay(self, message):
+        self._valve.wait()
+        if self._finished:
+            return
+        reactor.callFromThread(self._proto.outgoing, message)
+
+    def pauseProducing(self):
+        if not self._finished:
+            self._valve.clear()
+
+    def resumeProducing(self):
+        self._valve.set()
+
+    def stopProducing(self):
+        self._finished = True
+        self._valve.set()
+
+class RosbridgeWebSocketClientProtocol(WebSocketClientProtocol):
+    client_id_seed = ""
     # clients_connected = 0
     # authenticate = False
     # use_compression = False
@@ -83,15 +123,22 @@ class RosbridgeWebSocketClient(WebSocketClient):
     fragment_timeout = 600                  # seconds
     # protocol.py:
     delay_between_messages = 0              # seconds
-    max_message_size = 10000000             # bytes
+    max_message_size = None                 # bytes
     unregister_timeout = 10.0               # seconds
     bson_only_mode = False
     node_handle = None
+    tcpNoDelay = True                       # turn off Nagle algorithm
     # seed = 0
+    
+    def set_nodelay(self, nodelay):
+        self.tcpNoDelay = nodelay
 
+    def onConnect(self, response):
+        self.client_id_seed = response.peer
+        cls.node_handle.get_logger().info("Connected to websocket server: {0}".format(self.client_id_seed))
 
-    @log_exceptions
-    def open(self):
+    def onOpen(self):
+        cls.node_handle.get_logger().info("Connection opened to websocket server: {0}".format(self.client_id_seed))
         cls = self.__class__
         parameters = {
             "fragment_timeout": cls.fragment_timeout,
@@ -101,109 +148,81 @@ class RosbridgeWebSocketClient(WebSocketClient):
             "bson_only_mode": cls.bson_only_mode
         }
         try:
-            self.protocol = RosbridgeProtocol(cls.client_id_seed, cls.node_handle, parameters=parameters)
-            self.protocol.outgoing = self.send_message
-            # self.set_nodelay(True)
+            self.protocol = RosbridgeProtocol(self.client_id_seed, parameters=parameters)
+            producer = OutgoingValve(self)
+            self.transport.registerProducer(producer, True)
+            producer.resumeProducing()
+            self.protocol.outgoing = producer.relay
             self.authenticated = False
-            # self._write_lock = threading.RLock()
-            # cls.client_id_seed += 1
-            # cls.clients_connected += 1
-            # self.client_id = uuid.uuid4()
-            # if cls.client_manager:
-                # cls.client_manager.add_client(self.client_id, self.request.remote_ip)
         except Exception as exc:
-            cls.node_handle.get_logger().error("Unable to accept incoming connection.  Reason: {}".format(exc))
-
-        cls.node_handle.get_logger().info("Client connected")
-        # cls.node_handle.get_logger().info("Client connected. {} clients total.".format(cls.clients_connected))
+            cls.node_handle.get_logger().error("Unable to accept incoming connection.  Reason: %s", str(exc))
+        
+        cls.node_handle.get_logger().info("Server connected")
+        
         if cls.authenticate:
             cls.node_handle.get_logger().info("Awaiting proper authentication...")
 
-    @log_exceptions
-    def closed(self, code, reason):
-        """
-        Called by the server when the websocket stream and connection are
-        finally closed
-        """
-        cls = self.__class__
-        # rospy.loginfo("Closed")
-        self.protocol.finish()
-        cls.node_handle.get_logger().info("Closed. (%s, %s)" %( code, reason))
-
-  
-    def received_message(self, message):
-        """
-        Process incoming from server
-        """
-        cls = self.__class__
-        cls.node_handle.get_logger().info("Received: (%s)" % str(message))
-        # if type(message) is bytes:
-        #     message = message.decode('utf-8')
-        self.protocol.incoming(str(message))
-
-   
-    def send_message(self, message):
+    def outgoing(self, message):
         if type(message) == bson.BSON:
             binary = True
+            message = bytes(message)
         elif type(message) == bytearray:
             binary = True
             message = bytes(message)
         else:
             binary = False
+            message = message.encode('utf-8')
 
-        cls = self.__class__
+        self.sendMessage(message, binary)
         cls.node_handle.get_logger().info("Sent: (%s)" % str(message))
-        self.send(message, binary)
 
-        # with self._write_lock:
-        #     IOLoop.instance().add_callback(partial(self.prewrite_message, message, binary))
+    def onMessage(self, message, binary):
+        cls = self.__class__
+        if not binary:
+            message = message.decode('utf-8')
+        # check if we need to authenticate
+        if cls.authenticate and not self.authenticated:
+            try:
+                if cls.bson_only_mode:
+                    msg = bson.BSON(message).decode()
+                else:
+                    msg = json.loads(message)
 
-    # @coroutine
-    # def prewrite_message(self, message, binary):
-    #     cls = self.__class__
-    #     # Use a try block because the log decorator doesn't cooperate with @coroutine.
-    #     try:
-    #         with self._write_lock:
-    #             future = self.write_message(message, binary)
+                if msg['op'] == 'auth':
+                    # check the authorization information
+                    auth_srv = rospy.ServiceProxy('authenticate', Authentication)
+                    resp = auth_srv(msg['mac'], msg['client'], msg['dest'],
+                                                  msg['rand'], rospy.Time(msg['t']), msg['level'],
+                                                  rospy.Time(msg['end']))
+                    self.authenticated = resp.authenticated
+                    if self.authenticated:
+                        cls.node_handle.get_logger().info("Client %d has authenticated.", self.protocol.client_id)
+                        return
+                # if we are here, no valid authentication was given
+                cls.node_handle.get_logger().warn("Client %d did not authenticate. Closing connection.",
+                              self.protocol.client_id)
+                self.sendClose()
+            except:
+                # proper error will be handled in the protocol class
+                self.protocol.incoming(message)
+        else:
+            cls.node_handle.get_logger().info("Received: (%s)" % str(message))
+            # no authentication required
+            self.protocol.incoming(message)
 
-    #             # When closing, self.write_message() return None even if it's an undocument output.
-    #             # Consider it as WebSocketClosedError
-    #             # For tornado versions <4.3.0 self.write_message() does not have a return value
-    #             if future is None and tornado_version_info >= (4,3,0,0):
-    #                 raise WebSocketClosedError
+    def onClose(self, wasClean, code, reason):
+        if hasattr(self, 'protocol'):
+            self.protocol.finish()
 
-    #             yield future
-    #     except WebSocketClosedError:
-    #         cls.node_handle.get_logger().warn('WebSocketClosedError: Tried to write to a closed websocket',
-    #             throttle_duration_sec=1.0)
-    #         raise
-    #     except StreamClosedError:
-    #         cls.node_handle.get_logger().warn('StreamClosedError: Tried to write to a closed stream',
-    #             throttle_duration_sec=1.0)
-    #         raise
-    #     except BadYieldError:
-    #         # Tornado <4.5.0 doesn't like its own yield and raises BadYieldError.
-    #         # This does not affect functionality, so pass silently only in this case.
-    #         if tornado_version_info < (4, 5, 0, 0):
-    #             pass
-    #         else:
-    #             _log_exception()
-    #             raise
-    #     except:
-    #         _log_exception()
-    #         raise
+        cls.node_handle.get_logger().info("Disconnected from websocket server: {0}".format(reason))
+   
+class RosbridgeWebSocketClientFactory(WebSocketClientFactory, ReconnectingClientFactory):
+    maxDelay = 1
+    protocol = RosbridgeWebSocketClientProtocol
 
-    # @log_exceptions
-    # def check_origin(self, origin):
-    #     return True
+    def clientConnectionFailed(self, connector, reason):
+        self.retry(connector)
 
-    # @log_exceptions
-    # def get_compression_options(self):
-    #     # If this method returns None (the default), compression will be disabled.
-    #     # If it returns a dict (even an empty one), it will be enabled.
-    #     cls = self.__class__
+    def clientConnectionLost(self, connector, reason):
+        self.retry(connector)
 
-    #     if not cls.use_compression:
-    #         return None
-
-    #     return {}

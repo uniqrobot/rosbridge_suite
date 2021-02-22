@@ -4,6 +4,7 @@
   <arg name="ssl" default="false" />
   <arg name="certfile" default=""/>
   <arg name="keyfile" default="" />
+  <arg name="jwt_token" default=""/>
 
   <arg name="retry_startup_delay" default="5" />
 
@@ -12,9 +13,13 @@
   <arg name="max_message_size" default="None" />
   <arg name="unregister_timeout" default="10" />
 
-  <!-- <arg name="use_compression" default="false" /> -->
+  <arg name="use_compression" default="false" />
 
   <arg name="authenticate" default="false" />
+
+  <arg name="websocket_ping_interval" default="0" />
+  <arg name="websocket_ping_timeout" default="30" />
+  <arg name="websocket_null_origin" default="true" />
 
   <arg name="topics_glob" default="'[*]'" />
   <arg name="services_glob" default="'[*]'" />
@@ -34,6 +39,12 @@
     <param name="unregister_timeout" value="$(var unregister_timeout)"/>
     <!-- <param name="use_compression" value="$(var use_compression)"/> -->
 
+    <param name="use_compression" value="$(var use_compression)"/>
+    <param name="jwt_token" value="$(var jwt_token)"/>
+
+    <param name="websocket_ping_interval" value="$(var websocket_ping_interval)" />
+    <param name="websocket_ping_timeout" value="$(var websocket_ping_timeout)" />
+    
     <param name="topics_glob" value="$(var topics_glob)"/>
     <param name="services_glob" value="$(var services_glob)"/>
     <param name="params_glob" value="$(var params_glob)"/>
