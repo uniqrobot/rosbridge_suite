@@ -142,7 +142,7 @@ class RosbridgeWebSocketClient(WebSocketClient):
         Process incoming from server
         """
         cls = self.__class__
-        cls.node_handle.get_logger().info("Received: (%s)" % str(message))
+        # cls.node_handle.get_logger().info("Received: (%s)" % str(message))
         # if type(message) is bytes:
         #     message = message.decode('utf-8')
         self.protocol.incoming(str(message))

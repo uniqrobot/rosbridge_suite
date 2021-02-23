@@ -145,10 +145,12 @@ class MultiSubscriber():
             # the given callback.
             # In any case, the first message is handled using new_sub_callback,
             # which adds the new callback to the subscriptions dictionary.
-            self.new_subscriptions.update({client_id: callback})
-            if self.new_subscriber is None:
-                self.new_subscriber = self.node_handle.create_subscription(
-                    self.msg_class, self.topic, self._new_sub_callback, 10)
+            #改成如下语句后，可能潜藏潜在的bug。
+            self.subscriptions.update({client_id: callback})
+            # self.new_subscriptions.update({client_id: callback})
+            # if self.new_subscriber is None:
+            #     self.new_subscriber = self.node_handle.create_subscription(
+            #         self.msg_class, self.topic, self._new_sub_callback, 10)
 
     def unsubscribe(self, client_id):
         """ Unsubscribe the specified client from this subscriber
