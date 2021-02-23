@@ -114,7 +114,7 @@ class RosbridgeWebsocketClientNode(Node):
         # QoS profile with transient local durability (latched topic in ROS 1).
         client_count_qos_profile = QoSProfile(
             depth=10,
-            durability=QoSDurabilityPolicy.RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL
         )
 
         # Get the glob strings and parse them as arrays.
@@ -281,11 +281,12 @@ class RosbridgeWebsocketClientNode(Node):
                         "certfile": certfile,
                         "keyfile": keyfile
                     })
-                    ws.connect()
+                    # ws.connect()
                 else:
-                    ws = RosbridgeWebSocketClient(server_address)
-                    ws.open()
-                    ws.connect()
+                    ws = RosbridgeWebSocketClient(server_address)                    
+                    # ws.connect()
+                
+                ws.open()
                 self.get_logger().info("Rosbridge WebSocket connected on {}".format(server_address))
                 connected = True
             except error as e:

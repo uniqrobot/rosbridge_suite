@@ -246,7 +246,7 @@ class Protocol:
                 pass
 
             fragment_list = None
-            if self.fragment_size != None and len(serialized) > self.fragment_size:
+            if self.fragment_size != None and self.fragment_size != 0 and len(serialized) > self.fragment_size:
                 mid = message.get("id", None)
 
                 # TODO: think about splitting into fragments that have specified size including header-fields!
@@ -254,7 +254,7 @@ class Protocol:
                 fragment_list = Fragmentation(self).fragment(message, self.fragment_size, mid )
 
             # fragment list not empty -> send fragments
-            if fragment_list != None:
+            if fragment_list != None and self.fragment_size != 0:
                 for fragment in fragment_list:
                     if self.bson_only_mode:
                         self.outgoing(bson.BSON.encode(fragment))

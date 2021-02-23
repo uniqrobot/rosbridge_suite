@@ -218,6 +218,8 @@ class PublisherManager():
         the publisher
 
         """
+        print('<<<<<<<<<<<<<')
+        print(msg_type)
         latched_client_id = client_id if latch else None
         if not topic in self._publishers:
             self._publishers[topic] = MultiPublisher(

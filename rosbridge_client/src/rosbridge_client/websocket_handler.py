@@ -102,7 +102,7 @@ class RosbridgeWebSocketClient(WebSocketClient):
         }
         try:
             self.protocol = RosbridgeProtocol(cls.client_id_seed, cls.node_handle, parameters=parameters)
-            self.protocol.outgoing = self.send_message
+            self.protocol.outgoing = self.outgoing_message
             # self.set_nodelay(True)
             self.authenticated = False
             # self._write_lock = threading.RLock()
@@ -111,14 +111,20 @@ class RosbridgeWebSocketClient(WebSocketClient):
             # self.client_id = uuid.uuid4()
             # if cls.client_manager:
                 # cls.client_manager.add_client(self.client_id, self.request.remote_ip)
+            self.connect()
+            # self.run_forever()
         except Exception as exc:
-            cls.node_handle.get_logger().error("Unable to accept incoming connection.  Reason: {}".format(exc))
+            cls.node_handle.get_logger().error("Connect to server failed.  Reason: {}".format(exc))
 
-        cls.node_handle.get_logger().info("Client connected")
+        # cls.node_handle.get_logger().info("Client connected")
         # cls.node_handle.get_logger().info("Client connected. {} clients total.".format(cls.clients_connected))
         if cls.authenticate:
             cls.node_handle.get_logger().info("Awaiting proper authentication...")
 
+    def opened(self):
+        cls = self.__class__
+        cls.node_handle.get_logger().info("Client connected")
+        
     @log_exceptions
     def closed(self, code, reason):
         """
@@ -142,18 +148,18 @@ class RosbridgeWebSocketClient(WebSocketClient):
         self.protocol.incoming(str(message))
 
    
-    def send_message(self, message):
-        if type(message) == bson.BSON:
-            binary = True
-        elif type(message) == bytearray:
-            binary = True
-            message = bytes(message)
-        else:
-            binary = False
+    def outgoing_message(self, message):
+        # if type(message) == bson.BSON:
+        #     binary = True
+        # elif type(message) == bytearray:
+        #     binary = True
+        #     message = bytes(message)
+        # else:
+        #     binary = False
 
         cls = self.__class__
-        cls.node_handle.get_logger().info("Sent: (%s)" % str(message))
-        self.send(message, binary)
+        # cls.node_handle.get_logger().info("Sent: (%s)" % str(message))
+        self.send(message)
 
         # with self._write_lock:
         #     IOLoop.instance().add_callback(partial(self.prewrite_message, message, binary))
