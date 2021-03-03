@@ -72,7 +72,7 @@ class RosbridgeWebsocketClientNode(Node):
         super().__init__('rosbridge_websocket_client')
 
         RosbridgeWebSocketClient.node_handle = self
-
+        RosbridgeWebSocketClient.client_node_handle = rclpy.create_node('rosbridge_websocket_client_client_node')   
         ##################################################
         # Parameter handling                             #
         ##################################################
