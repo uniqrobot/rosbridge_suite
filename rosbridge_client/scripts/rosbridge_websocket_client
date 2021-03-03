@@ -60,11 +60,16 @@ from rosbridge_library.capabilities.call_service import CallService
 
 from rosbridge_client import RosbridgeWebSocketClient
 
-# def start_hook():
-#     IOLoop.instance().start()
+from threading import Thread
+from tornado.ioloop import IOLoop
+from tornado.ioloop import PeriodicCallback
+from tornado.web import Application
 
-# def shutdown_hook():
-#     IOLoop.instance().stop()
+def start_hook():
+    IOLoop.instance().start()
+
+def shutdown_hook():
+    IOLoop.instance().stop()
 
 
 class RosbridgeWebsocketClientNode(Node):
@@ -283,10 +288,11 @@ class RosbridgeWebsocketClientNode(Node):
                     })
                     # ws.connect()
                 else:
-                    ws = RosbridgeWebSocketClient(server_address)                    
+                    ws = RosbridgeWebSocketClient(server_address, protocols=['http-only', 'chat'])                    
                     # ws.connect()
                 
                 ws.open()
+                ws.connect()
                 self.get_logger().info("Rosbridge WebSocket connected on {}".format(server_address))
                 connected = True
             except error as e:
@@ -295,31 +301,24 @@ class RosbridgeWebsocketClientNode(Node):
                     "Retrying in {}s.".format(e, retry_startup_delay))
                 time.sleep(retry_startup_delay)
    
-    def __del__(self):#当程序结束时运行
-        ws.close()
+    # def __del__(self):#当程序结束时运行
+    #     ws.close()
 
 def main(args=None):
     if args is None:
         args = sys.argv
 
     rclpy.init(args=args)
-    rosbridge_websocket_client_node = RosbridgeWebsocketClientNode()
+    rosbridge_websocket_node = RosbridgeWebsocketClientNode()
 
-    # spin_callback = PeriodicCallback(lambda: rclpy.spin_once(rosbridge_websocket_node, timeout_sec=0.01), 1)
-    # spin_callback.start()
-    # start_hook()
-    # rate = rosbridge_websocket_client_node.create_rate(1)
-    try:
-        # while rclpy.ok():
-        #     rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01)
-        #     rate.sleep()
-        rclpy.spin(rosbridge_websocket_client_node)
-    except KeyboardInterrupt:
-        pass
+    spin_callback = PeriodicCallback(lambda: rclpy.spin_once(rosbridge_websocket_node, timeout_sec=0.01), 1)
+    spin_callback.start()
+    start_hook()
 
-    rosbridge_websocket_client_node.destroy_node()
+    rosbridge_websocket_node.destroy_node()
     rclpy.shutdown()
-    # shutdown_hook()  # shutdown hook to stop the server
+    shutdown_hook()  # shutdown hook to stop the server
 
 if __name__ == '__main__':
     main()
+

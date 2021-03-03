@@ -16,6 +16,7 @@ class UnadvertiseService(Capability):
         protocol.register_operation("unadvertise_service", self.unadvertise_service)
 
     def unadvertise_service(self, message):
+        return
         # parse the message
         service_name = message["service"]
 

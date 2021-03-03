@@ -29,6 +29,7 @@ class AdvertisedServiceHandler():
         return id
 
     def handle_request(self, req):
+        return
         with self.lock:
             self.active_requests += 1
         # generate a unique ID
@@ -92,6 +93,7 @@ class AdvertiseService(Capability):
         protocol.register_operation("advertise_service", self.advertise_service)
 
     def advertise_service(self, message):
+        return
         # Typecheck the args
         self.basic_type_check(message, self.advertise_service_msg_fields)
 

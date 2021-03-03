@@ -54,6 +54,9 @@ from std_msgs.msg import Int32
 
 from ws4py.client.threadedclient import WebSocketClient
 
+from ws4py.client.tornadoclient import TornadoWebSocketClient
+from tornado import ioloop
+
 def _log_exception():
     """Log the most recent exception to ROS."""
     exc = traceback.format_exception(*sys.exc_info())
@@ -72,7 +75,7 @@ def log_exceptions(f):
     return wrapper
 
 
-class RosbridgeWebSocketClient(WebSocketClient):
+class RosbridgeWebSocketClient(TornadoWebSocketClient):
     client_id_seed = 1
     # clients_connected = 0
     # authenticate = False
@@ -111,7 +114,7 @@ class RosbridgeWebSocketClient(WebSocketClient):
             # self.client_id = uuid.uuid4()
             # if cls.client_manager:
                 # cls.client_manager.add_client(self.client_id, self.request.remote_ip)
-            self.connect()
+            # self.connect()
             # self.run_forever()
         except Exception as exc:
             cls.node_handle.get_logger().error("Connect to server failed.  Reason: {}".format(exc))
@@ -124,19 +127,7 @@ class RosbridgeWebSocketClient(WebSocketClient):
     def opened(self):
         cls = self.__class__
         cls.node_handle.get_logger().info("Client connected")
-        
-    @log_exceptions
-    def closed(self, code, reason):
-        """
-        Called by the server when the websocket stream and connection are
-        finally closed
-        """
-        cls = self.__class__
-        # rospy.loginfo("Closed")
-        self.protocol.finish()
-        cls.node_handle.get_logger().info("Closed. (%s, %s)" %( code, reason))
 
-  
     def received_message(self, message):
         """
         Process incoming from server
@@ -146,8 +137,19 @@ class RosbridgeWebSocketClient(WebSocketClient):
         # if type(message) is bytes:
         #     message = message.decode('utf-8')
         self.protocol.incoming(str(message))
-
    
+    @log_exceptions
+    def closed(self, code, reason=None):
+        """
+        Called by the server when the websocket stream and connection are
+        finally closed
+        """
+        cls = self.__class__
+        # rospy.loginfo("Closed")
+        self.protocol.finish()
+        ioloop.IOLoop.instance().stop()
+        cls.node_handle.get_logger().info("Closed. (%s, %s)" %( code, reason))
+ 
     def outgoing_message(self, message):
         # if type(message) == bson.BSON:
         #     binary = True
