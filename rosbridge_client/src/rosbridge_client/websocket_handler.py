@@ -105,7 +105,7 @@ class RosbridgeWebSocketClient(WebSocketClient):
             self.protocol.outgoing = self.outgoing_message
             # self.set_nodelay(True)
             self.authenticated = False
-            # self._write_lock = threading.RLock()
+            self._write_lock = threading.RLock()
             # cls.client_id_seed += 1
             # cls.clients_connected += 1
             # self.client_id = uuid.uuid4()
@@ -159,7 +159,8 @@ class RosbridgeWebSocketClient(WebSocketClient):
 
         cls = self.__class__
         # cls.node_handle.get_logger().info("Sent: (%s)" % str(message))
-        self.send(message)
+        with self._write_lock:
+            self.send(message)
 
         # with self._write_lock:
         #     IOLoop.instance().add_callback(partial(self.prewrite_message, message, binary))

@@ -74,8 +74,8 @@ class AdvertisedServiceHandler():
         """
         with self.lock:
             self.shutdown_requested = True
-        start_time = time.clock()
-        while time.clock() - start_time < timeout:
+        start_time = time.process_time()
+        while time.process_time() - start_time < timeout:
             time.sleep(0)
         self.protocol.node_handle.destroy_service(self.service_handle)
 
@@ -115,7 +115,7 @@ class AdvertiseService(Capability):
         # check for an existing entry
         if service_name in self.protocol.external_service_list.keys():
             self.protocol.log("warn", "Duplicate service advertised. Overwriting %s." % service_name)
-            self.protocol.external_service_list[service_name].service_handle.shutdown("Duplicate advertiser.")
+            # self.protocol.external_service_list[service_name].service_handle.shutdown("Duplicate advertiser.")
             del self.protocol.external_service_list[service_name]
 
         # setup and store the service information
