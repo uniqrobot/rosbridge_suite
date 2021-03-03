@@ -91,7 +91,7 @@ class Protocol:
 
     parameters = None
 
-    def __init__(self, client_id, node_handle, client_node_handle):
+    def __init__(self, client_id, node_handle):
         """ Keyword arguments:
         client_id -- a unique ID for this client to take.  Uniqueness is
         important otherwise there will be conflicts between multiple clients
@@ -103,7 +103,6 @@ class Protocol:
         self.capabilities = []
         self.operations = {}
         self.node_handle = node_handle
-        self.client_node_handle = client_node_handle
 
         if self.parameters:
             self.fragment_size = self.parameters["max_message_size"]

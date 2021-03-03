@@ -87,7 +87,6 @@ class RosbridgeWebSocketClient(WebSocketClient):
     unregister_timeout = 10.0               # seconds
     bson_only_mode = False
     node_handle = None
-    client_node_handle = None           
     # seed = 0
 
 
@@ -102,7 +101,7 @@ class RosbridgeWebSocketClient(WebSocketClient):
             "bson_only_mode": cls.bson_only_mode
         }
         try:
-            self.protocol = RosbridgeProtocol(cls.client_id_seed, cls.node_handle, cls.client_node_handle, parameters=parameters)
+            self.protocol = RosbridgeProtocol(cls.client_id_seed, cls.node_handle, parameters=parameters)
             self.protocol.outgoing = self.outgoing_message
             # self.set_nodelay(True)
             self.authenticated = False
