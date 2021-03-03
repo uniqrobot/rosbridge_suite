@@ -309,13 +309,22 @@ def main(args=None):
         args = sys.argv
 
     rclpy.init(args=args)
-    rosbridge_websocket_node = RosbridgeWebsocketClientNode()
+    rosbridge_websocket_client_node = RosbridgeWebsocketClientNode()
 
-    spin_callback = PeriodicCallback(lambda: rclpy.spin_once(rosbridge_websocket_node, timeout_sec=0.01), 1)
+    # try:
+    #     # while rclpy.ok():
+    #     #     rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01)
+    #     #     rate.sleep()
+    #     start_hook()
+    #     rclpy.spin(rosbridge_websocket_client_node)
+    # except KeyboardInterrupt:
+    #     pass
+       
+    spin_callback = PeriodicCallback(lambda: rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01), 1)
     spin_callback.start()
     start_hook()
 
-    rosbridge_websocket_node.destroy_node()
+    rosbridge_websocket_client_node.destroy_node()
     rclpy.shutdown()
     shutdown_hook()  # shutdown hook to stop the server
 

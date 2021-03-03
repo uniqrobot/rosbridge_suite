@@ -41,18 +41,18 @@ import threading
 import traceback
 from functools import partial, wraps
 
-from tornado import version_info as tornado_version_info
-from tornado.ioloop import IOLoop
-from tornado.iostream import StreamClosedError
-from tornado.websocket import WebSocketHandler, WebSocketClosedError
-from tornado.gen import coroutine, BadYieldError
+# from tornado import version_info as tornado_version_info
+# from tornado.ioloop import IOLoop
+# from tornado.iostream import StreamClosedError
+# from tornado.websocket import WebSocketHandler, WebSocketClosedError
+# from tornado.gen import coroutine, BadYieldError
 
 from rosbridge_library.rosbridge_protocol import RosbridgeProtocol
 from rosbridge_library.util import json, bson
 
 from std_msgs.msg import Int32
 
-from ws4py.client.threadedclient import WebSocketClient
+# from ws4py.client.threadedclient import WebSocketClient
 
 from ws4py.client.tornadoclient import TornadoWebSocketClient
 from tornado import ioloop
@@ -147,7 +147,7 @@ class RosbridgeWebSocketClient(TornadoWebSocketClient):
         cls = self.__class__
         # rospy.loginfo("Closed")
         self.protocol.finish()
-        ioloop.IOLoop.instance().stop()
+        # ioloop.IOLoop.instance().stop()
         cls.node_handle.get_logger().info("Closed. (%s, %s)" %( code, reason))
  
     def outgoing_message(self, message):
