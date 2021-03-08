@@ -158,7 +158,7 @@ class RosbridgeWebSocketClient(WebSocketClient):
         #     binary = False
 
         cls = self.__class__
-        # cls.node_handle.get_logger().info("Sent: (%s)" % str(message))
+        cls.node_handle.get_logger().info("Sent: (%s)" % str(message))
         with self._write_lock:
             self.send(message)
 
