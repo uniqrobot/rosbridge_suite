@@ -75,11 +75,11 @@ def shutdown_hook():
 
 
 class RosbridgeWebsocketClientNode(Node):
-    def __init__(self):
+    def __init__(self, io_loop):
         super().__init__('rosbridge_websocket_client')
 
         RosbridgeWebSocketClient.node_handle = self
-
+        self.io_loop = io_loop
         ##################################################
         # Parameter handling                             #
         ##################################################
@@ -276,8 +276,15 @@ class RosbridgeWebsocketClientNode(Node):
 
         # application = Application([(r"/", RosbridgeWebSocketClient), (r"", RosbridgeWebSocketClient)], **tornado_settings)
         server_address = 'ws://www.uniqrobot.com:18888/robot/c0b5d7943d7b' #address + ':' + str(port)  #"ws://localhost:9090")
-        ws = RosbridgeWebSocketClient(server_address)   
+        # ws = RosbridgeWebSocketClient(server_address)   
 
+        self.client = RosbridgeWebSocketClient(self.io_loop)
+        #ws_url = 'ws://127.0.0.1:8090/ws'
+        ws_url = 'ws://www.uniqrobot.com:18888/robot/c0b5d7943d7b'
+        self.client.connect(ws_url, auto_reconnet=True, reconnet_interval=10)
+
+    def close(self):
+        self.client.close()
         # connected = False
         # ws = None
         # while not connected and self.context.ok():
@@ -312,7 +319,9 @@ def main(args=None):
         args = sys.argv
 
     rclpy.init(args=args)
-    rosbridge_websocket_client_node = RosbridgeWebsocketClientNode()
+
+    io_loop = IOLoop.instance()
+    rosbridge_websocket_client_node = RosbridgeWebsocketClientNode(io_loop)
 
     # try:
     #     # while rclpy.ok():
@@ -325,11 +334,16 @@ def main(args=None):
        
     spin_callback = PeriodicCallback(lambda: rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01), 5)
     spin_callback.start()
-    start_hook()
+    # start_hook()   
+
+    try:
+        io_loop.start()
+    except KeyboardInterrupt:
+        rosbridge_websocket_client_node.close()
 
     rosbridge_websocket_client_node.destroy_node()
     rclpy.shutdown()
-    shutdown_hook()  # shutdown hook to stop the server
+    # shutdown_hook()  # shutdown hook to stop the server
 
 if __name__ == '__main__':
     main()

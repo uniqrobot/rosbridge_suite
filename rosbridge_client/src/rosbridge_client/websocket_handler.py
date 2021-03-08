@@ -62,6 +62,16 @@ from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado import gen
 from tornado.websocket import websocket_connect
 
+import time
+import functools
+import json
+
+from tornado import gen
+from tornado import httpclient
+from tornado import httputil
+from tornado import ioloop
+from tornado import websocket
+
 def _log_exception():
     """Log the most recent exception to ROS."""
     exc = traceback.format_exception(*sys.exc_info())
@@ -79,8 +89,102 @@ def log_exceptions(f):
             raise
     return wrapper
 
+APPLICATION_JSON = 'application/json'
+DEFAULT_CONNECT_TIMEOUT = 30
+DEFAULT_REQUEST_TIMEOUT = 30
 
-class RosbridgeWebSocketClient(object):
+
+class WebSocketClient(object):
+    """Base for web socket clients.
+    """
+
+    DISCONNECTED = 0
+    CONNECTING = 1
+    CONNECTED = 2
+
+    def __init__(self, io_loop=None,
+                 connect_timeout=DEFAULT_CONNECT_TIMEOUT,
+                 request_timeout=DEFAULT_REQUEST_TIMEOUT):
+
+        self.connect_timeout = connect_timeout
+        self.request_timeout = request_timeout
+        self._io_loop = io_loop or ioloop.IOLoop.current()
+        self._ws_connection = None
+        self._connect_status = self.DISCONNECTED
+
+    def connect(self, url):
+        """Connect to the server.
+        :param str url: server URL.
+        """
+        self._connect_status = self.CONNECTING
+        headers = httputil.HTTPHeaders({'Content-Type': APPLICATION_JSON})
+        request = httpclient.HTTPRequest(url=url,
+                                         connect_timeout=self.connect_timeout,
+                                         request_timeout=self.request_timeout,
+                                         headers=headers)
+        ws_conn = websocket.WebSocketClientConnection(self._io_loop, request)
+        ws_conn.connect_future.add_done_callback(self._connect_callback)
+
+    def send(self, data):
+        """Send message to the server
+        :param str data: message.
+        """
+
+        if self._ws_connection:
+            self._ws_connection.write_message(json.dumps(data))
+
+    def close(self, reason=''):
+        """Close connection.
+        """
+
+        if self._connect_status != self.DISCONNECTED:
+            self._connect_status = self.DISCONNECTED
+            self._ws_connection and self._ws_connection.close()
+            self._ws_connection = None
+            self.on_connection_close(reason)
+
+    def _connect_callback(self, future):
+        if future.exception() is None:
+            self._connect_status = self.CONNECTED
+            self._ws_connection = future.result()
+            self.on_connection_success()
+            self._read_messages()
+        else:
+            self.close(future.exception())
+
+    def is_connected(self):
+        return self._ws_connection is not None
+
+    @gen.coroutine
+    def _read_messages(self):
+        while True:
+            msg = yield self._ws_connection.read_message()
+            if msg is None:
+                self.close()
+                break
+
+            self.on_message(msg)
+
+    def on_message(self, msg):
+        """This is called when new message is available from the server.
+        :param str msg: server message.
+        """
+
+        pass
+
+    def on_connection_success(self):
+        """This is called on successful connection ot the server.
+        """
+
+        pass
+
+    def on_connection_close(self, reason):
+        """This is called when server closed the connection.
+        """
+        pass
+
+
+class RosbridgeWebSocketClient(WebSocketClient):
     client_id_seed = 1
     # clients_connected = 0
     # authenticate = False
@@ -96,10 +200,13 @@ class RosbridgeWebSocketClient(object):
     bson_only_mode = False
     node_handle = None
     # seed = 0
+    heartbeat_interval = 3
 
 
     @log_exceptions
-    def __init__(self, url): #, timeout):
+    def __init__(self, io_loop=None,
+                 connect_timeout=DEFAULT_CONNECT_TIMEOUT,
+                 request_timeout=DEFAULT_REQUEST_TIMEOUT): #, timeout):
         cls = self.__class__
         parameters = {
             "fragment_timeout": cls.fragment_timeout,
@@ -131,48 +238,94 @@ class RosbridgeWebSocketClient(object):
         if cls.authenticate:
             cls.node_handle.get_logger().info("Awaiting proper authentication...")
 
-        self.url = url
-        # self.timeout = timeout
-        # self.ioloop = IOLoop.instance()
-        self.ws = None
-        self.connect()
-        # PeriodicCallback(self.keep_alive, 20000).start()
-        # self.ioloop.start()
+        self.connect_timeout = connect_timeout
+        self.request_timeout = request_timeout
+        self._io_loop = io_loop or ioloop.IOLoop.current()
+        self.ws_url = None
+        self.auto_reconnet = False
+        self.last_active_time = 0
+        self.pending_hb = None
 
-    @gen.coroutine
-    def connect(self):
-        cls = self.__class__
-        cls.node_handle.get_logger().info("trying to connect")
-        try:
-            self.ws = yield websocket_connect(self.url)
-        except Exception as e:
-            cls.node_handle.get_logger().error("connection error")
-        else:
-            cls.node_handle.get_logger().info("connected")
-            self.run()
+        super(RosbridgeWebSocketClient, self).__init__(self._io_loop,
+                                                       self.connect_timeout,
+                                                       self.request_timeout)
 
-    @gen.coroutine
-    def run(self):
-        cls = self.__class__
-        while True:
-            try:
-                msg = yield self.ws.read_message()
-            except Exception as e:
-                cls.node_handle.get_logger().error('接收错误')
-                cls.node_handle.get_logger().error(str(e))
-            # if msg is None:
-            #     cls.node_handle.get_logger().info("connection closed")
-            #     self.ws = None
-            #     self.protocol.finish()
-            #     break
-            # cls.node_handle.get_logger().info("Received: (%s)" % str(msg))
-            self.protocol.incoming(str(msg))
+    def connect(self, url, auto_reconnet=True, reconnet_interval=10):
+        self.ws_url = url
+        self.auto_reconnet = auto_reconnet
+        self.reconnect_interval = reconnet_interval
+
+        super(RosbridgeWebSocketClient, self).connect(self.ws_url)       
+
+    def send(self, msg):
+        super(RosbridgeWebSocketClient, self).send(msg)
+        self.last_active_time = time.time()
+
+    def on_message(self, msg):
+        # print'on_message msg=', msg
+        self.last_active_time = time.time()
+        self.protocol.incoming(str(msg))
     
-    def keep_alive(self):
-        if self.ws is None:
-            self.connect()
-        else:
-            self.ws.write_message("keep alive")
+    def on_connection_success(self):
+        cls.node_handle.get_logger().info("connected")
+        self.send(self.msg)
+        self.last_active_time = time.time()
+        self.send_heartbeat()
+
+    def on_connection_close(self, reason):
+        print('Connection closed reason=%s' % (reason,))
+        self.pending_hb and self._io_loop.remove_timeout(self.pending_hb)
+
+        self.reconnect()
+
+    def reconnect(self):
+        # print 'reconnect'
+        if not self.is_connected() and self.auto_reconnet:
+            self._io_loop.call_later(self.reconnect_interval,
+                                     super(RosbridgeWebSocketClient, self).connect, self.ws_url)
+
+    def send_heartbeat(self):
+        if self.is_connected():
+            now = time.time()
+            if (now > self.last_active_time + self.heartbeat_interval):
+                self.last_active_time = now
+                self.send(self.hb_msg)
+
+            self.pending_hb = self._io_loop.call_later(self.heartbeat_interval, self.send_heartbeat)
+    # @gen.coroutine
+    # def connect(self):
+    #     cls = self.__class__
+    #     cls.node_handle.get_logger().info("trying to connect")
+    #     try:
+    #         self.ws = yield websocket_connect(self.url)
+    #     except Exception as e:
+    #         cls.node_handle.get_logger().error("connection error")
+    #     else:
+    #         cls.node_handle.get_logger().info("connected")
+    #         self.run()
+
+    # @gen.coroutine
+    # def run(self):
+    #     cls = self.__class__
+    #     while True:
+    #         try:
+    #             msg = yield self.ws.read_message()
+    #         except Exception as e:
+    #             cls.node_handle.get_logger().error('接收错误')
+    #             cls.node_handle.get_logger().error(str(e))
+    #         # if msg is None:
+    #         #     cls.node_handle.get_logger().info("connection closed")
+    #         #     self.ws = None
+    #         #     self.protocol.finish()
+    #         #     break
+    #         # cls.node_handle.get_logger().info("Received: (%s)" % str(msg))
+    #         self.protocol.incoming(str(msg))
+    
+    # def keep_alive(self):
+    #     if self.ws is None:
+    #         self.connect()
+    #     else:
+    #         self.ws.write_message("keep alive")
 
     # def received_message(self, message):
     #     """
@@ -219,7 +372,7 @@ class RosbridgeWebSocketClient(object):
         try:
             # if len(message) > 65536:             
             #     return
-            self.ws.write_message(message)
+            self.send(message)
         except Exception as e:
             cls.node_handle.get_logger().error('发送错误')
             cls.node_handle.get_logger().error(str(e))
