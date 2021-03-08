@@ -33,6 +33,7 @@
 import uuid
 
 from rclpy.time import Time
+import time
 # TODO(@jubeira): Re-add once rosauth is ported to ROS2.
 # from rosauth.srv import Authentication
 
@@ -109,6 +110,8 @@ class RosbridgeWebSocketClient(TornadoWebSocketClient):
             # self.set_nodelay(True)
             self.authenticated = False
             self._write_lock = threading.RLock()
+            # self.stream.max_buffer_size = 256 * 1024 * 1024
+            # self.reading_buffer_size = 10000000
             # cls.client_id_seed += 1
             # cls.clients_connected += 1
             # self.client_id = uuid.uuid4()
@@ -161,8 +164,16 @@ class RosbridgeWebSocketClient(TornadoWebSocketClient):
 
         cls = self.__class__
         # cls.node_handle.get_logger().info("Sent: (%s)" % str(message))
-        with self._write_lock:
-            self.send(message)
+        # with self._write_lock:
+            # if len(message) < 65536:   #消息大于65536会报错
+        print(time.asctime( time.localtime(time.time())))
+        print('---------------------------------------')
+        # print(len(message))
+        print(message)
+        if len(message) > 65536:             
+            return
+            # print(message)
+        self.send(message)
 
         # with self._write_lock:
         #     IOLoop.instance().add_callback(partial(self.prewrite_message, message, binary))

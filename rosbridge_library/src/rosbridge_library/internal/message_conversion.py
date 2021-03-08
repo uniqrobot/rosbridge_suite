@@ -220,13 +220,15 @@ def _from_list_inst(inst, rostype):
 
 def _from_object_inst(inst, rostype):
     # Create an empty dict then populate with values from the inst
-    msg = {}
+    msg = {}   
     # Equivalent for zip(inst.__slots__, inst._slot_types) in ROS1:
-    for field_name, field_rostype in inst.get_fields_and_field_types().items():
-        field_inst = getattr(inst, field_name)
-        msg[field_name] = _from_inst(field_inst, field_rostype)
+    # 此处需判断inst是否有属性get_fields_and_field_types，否则会报错。由于diagnostics中的level是byte类型，而该类型在ros2中没有get_fields_and_field_types属性
+    if hasattr(inst, 'get_fields_and_field_types'):
+        for field_name, field_rostype in inst.get_fields_and_field_types().items():
+            field_inst = getattr(inst, field_name)
+            msg[field_name] = _from_inst(field_inst, field_rostype)
     return msg
-
+  
 def _to_inst(msg, rostype, roottype, inst=None, stack=[]):
     # Check if it's uint8[], and if it's a string, try to b64decode
     for binary_type, expression in ros_binary_types_list_braces:
