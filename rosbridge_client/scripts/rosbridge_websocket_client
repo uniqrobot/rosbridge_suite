@@ -60,15 +60,14 @@ from rosbridge_library.capabilities.call_service import CallService
 
 from rosbridge_client import RosbridgeWebSocketClient
 
-# from threading import Thread
+from threading import Thread
 from tornado.ioloop import IOLoop
 from tornado.ioloop import PeriodicCallback
 from tornado.web import Application
-
-import asyncio
-import websockets
+# from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
 def start_hook():
+    # asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
     IOLoop.instance().start()
 
 def shutdown_hook():
@@ -276,17 +275,9 @@ class RosbridgeWebsocketClientNode(Node):
         ##################################################
 
         # application = Application([(r"/", RosbridgeWebSocketClient), (r"", RosbridgeWebSocketClient)], **tornado_settings)
-        # server_address = 'ws://www.uniqrobot.com:18888/robot/c0b5d7943d7b' #address + ':' + str(port)  #"ws://localhost:9090")
+        server_address = 'ws://www.uniqrobot.com:18888/robot/c0b5d7943d7b' #address + ':' + str(port)  #"ws://localhost:9090")
+        ws = RosbridgeWebSocketClient(server_address)   
 
-        self.__loop = asyncio.new_event_loop()
-        self.__task: Optional[Task] = None
-        self.__thread = Thread(target=self.__webosocket_loop)
-        self.__thread.start()
-        self.done = False
-
-        # ws = RosbridgeWebSocketClient(server_address, 5)
-        # asyncio.get_event_loop().run_until_complete(ws.run())
-        # asyncio.get_event_loop().run_forever()
         # connected = False
         # ws = None
         # while not connected and self.context.ok():
@@ -312,48 +303,33 @@ class RosbridgeWebsocketClientNode(Node):
         #             "Unable to access server: {} "
         #             "Retrying in {}s.".format(e, retry_startup_delay))
         #         time.sleep(retry_startup_delay)
-    
-    def __webosocket_loop(self):
-        # self.__task = self.__loop.create_task(f)
-        server_address = 'ws://www.uniqrobot.com:18888/robot/c0b5d7943d7b' #address + ':' + str(port)  #"ws://localhost:9090")
-        ws = RosbridgeWebSocketClient(server_address, 5)        
-        self.__loop.run_until_complete(ws.run())
-        # self.__loop.run_forever()
-
-    def __del__(self):#当程序结束时运行
-        print("stopping loop")
-        self.done = True
-        # if self.__task is not None:
-        #     self.__task.cancel()
-            
-        self.__loop.stop()
-        self.__thread.join()
+   
+    # def __del__(self):#当程序结束时运行
+    #     ws.close()
 
 def main(args=None):
     if args is None:
         args = sys.argv
 
     rclpy.init(args=args)
-    print('OOOOOOOOOOOOOOOOOOOOOOOOO')
     rosbridge_websocket_client_node = RosbridgeWebsocketClientNode()
 
-    try:
-        # while rclpy.ok():
-        #     rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01)
-        #     rate.sleep()
-        # start_hook()
-        print('###############################')
-        rclpy.spin(rosbridge_websocket_client_node)
-    except KeyboardInterrupt:
-        pass
+    # try:
+    #     # while rclpy.ok():
+    #     #     rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01)
+    #     #     rate.sleep()
+    #     start_hook()
+    #     rclpy.spin(rosbridge_websocket_client_node)
+    # except KeyboardInterrupt:
+    #     pass
        
-    # spin_callback = PeriodicCallback(lambda: rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01), 1)
-    # spin_callback.start()
-    # start_hook()
+    spin_callback = PeriodicCallback(lambda: rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01), 5)
+    spin_callback.start()
+    start_hook()
 
     rosbridge_websocket_client_node.destroy_node()
     rclpy.shutdown()
-    # shutdown_hook()  # shutdown hook to stop the server
+    shutdown_hook()  # shutdown hook to stop the server
 
 if __name__ == '__main__':
     main()

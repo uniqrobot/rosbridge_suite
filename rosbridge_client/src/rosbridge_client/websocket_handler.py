@@ -58,8 +58,9 @@ from std_msgs.msg import Int32
 # from ws4py.client.tornadoclient import TornadoWebSocketClient
 # from tornado import ioloop
 
-import asyncio
-import websockets
+from tornado.ioloop import IOLoop, PeriodicCallback
+from tornado import gen
+from tornado.websocket import websocket_connect
 
 def _log_exception():
     """Log the most recent exception to ROS."""
@@ -98,7 +99,7 @@ class RosbridgeWebSocketClient(object):
 
 
     @log_exceptions
-    def __init__(self, url, timeout):
+    def __init__(self, url): #, timeout):
         cls = self.__class__
         parameters = {
             "fragment_timeout": cls.fragment_timeout,
@@ -134,56 +135,54 @@ class RosbridgeWebSocketClient(object):
         # self.timeout = timeout
         # self.ioloop = IOLoop.instance()
         self.ws = None
-        # self.connect()
+        self.connect()
         # PeriodicCallback(self.keep_alive, 20000).start()
         # self.ioloop.start()
 
-    async def run(self):      
-        cls = self.__class__  
-        cls.node_handle.get_logger().info("trying to connect")
-        async with websockets.connect(self.url) as websocket:
-            self.ws = websocket
-            cls.node_handle.get_logger().info("已连接")
-
-            self.outgoing_message("测试发送")
-            # print(f"> {name}")
-
-            # greeting = await websocket.recv()
-            # print(f"< {greeting}")
-            
-            while True:
-                message = await self.ws.recv()
-                self.received_message(message)
-        
-
-    # @gen.coroutine
-    # def run(self):
-    #     cls = self.__class__
-    #     while True:
-    #         msg = yield self.ws.read_message()
-    #         if msg is None:
-    #             cls.node_handle.get_logger().info("connection closed")
-    #             self.ws = None
-    #             self.protocol.finish()
-    #             break
-    #         cls.node_handle.get_logger().info("Received: (%s)" % str(msg))
-    #         self.protocol.incoming(str(msg))
-    
-    # def keep_alive(self):
-    #     if self.ws is None:
-    #         self.connect()
-    #     else:
-    #         self.ws.write_message("keep alive")
-
-    def received_message(self, message):
-        """
-        Process incoming from server
-        """
+    @gen.coroutine
+    def connect(self):
         cls = self.__class__
-        cls.node_handle.get_logger().info("Received: (%s)" % str(message))
-        # if type(message) is bytes:
-        #     message = message.decode('utf-8')
-        self.protocol.incoming(str(message))
+        cls.node_handle.get_logger().info("trying to connect")
+        try:
+            self.ws = yield websocket_connect(self.url)
+        except Exception as e:
+            cls.node_handle.get_logger().error("connection error")
+        else:
+            cls.node_handle.get_logger().info("connected")
+            self.run()
+
+    @gen.coroutine
+    def run(self):
+        cls = self.__class__
+        while True:
+            try:
+                msg = yield self.ws.read_message()
+            except Exception as e:
+                cls.node_handle.get_logger().error('接收错误')
+                cls.node_handle.get_logger().error(str(e))
+            # if msg is None:
+            #     cls.node_handle.get_logger().info("connection closed")
+            #     self.ws = None
+            #     self.protocol.finish()
+            #     break
+            # cls.node_handle.get_logger().info("Received: (%s)" % str(msg))
+            self.protocol.incoming(str(msg))
+    
+    def keep_alive(self):
+        if self.ws is None:
+            self.connect()
+        else:
+            self.ws.write_message("keep alive")
+
+    # def received_message(self, message):
+    #     """
+    #     Process incoming from server
+    #     """
+    #     cls = self.__class__
+    #     # cls.node_handle.get_logger().info("Received: (%s)" % str(message))
+    #     # if type(message) is bytes:
+    #     #     message = message.decode('utf-8')
+    #     self.protocol.incoming(str(message))
    
     # @log_exceptions
     # def closed(self, code, reason=None):
@@ -207,18 +206,24 @@ class RosbridgeWebSocketClient(object):
         #     binary = False
 
         cls = self.__class__
-        cls.node_handle.get_logger().info("Sent: (%s)" % str(message))
+        # cls.node_handle.get_logger().info("Sent: (%s)" % str(message))
         # with self._write_lock:
             # if len(message) < 65536:   #消息大于65536会报错
-            
         # print(time.asctime( time.localtime(time.time())))
         # print('---------------------------------------')
-        # # print(len(message))
+        # print(len(message))
         # print(message)
         # if len(message) > 65536:             
         #     return
             # print(message)
-        self.ws.send(message)
+        try:
+            # if len(message) > 65536:             
+            #     return
+            self.ws.write_message(message)
+        except Exception as e:
+            cls.node_handle.get_logger().error('发送错误')
+            cls.node_handle.get_logger().error(str(e))
+        
 
         # with self._write_lock:
         #     IOLoop.instance().add_callback(partial(self.prewrite_message, message, binary))
