@@ -145,7 +145,8 @@ class RosbridgeWebSocketClient(object):
             self.websocket = websocket
             self.loop = asyncio.get_running_loop()
             while True:     
-                # await websocket.send(name)
+                await websocket.send('hahaha')
+                cls.node_handle.get_logger().info('发送成功')
                 # print(f"> {name}")
 
                 msg = await websocket.recv()
@@ -234,16 +235,20 @@ class RosbridgeWebSocketClient(object):
         try:
             # if len(message) > 65536:             
             #     return
-            cls.node_handle.get_logger().info("发送: (%s)" % str(message))
+            # cls.node_handle.get_logger().info("发送: (%s)" % str(message))
             # self.ws.write_message(message)
-            self.loop.call_soon(self.send_message, message)
+            # self.__task = self.__loop.create_task(self.send_message)
+            self.loop.call_soon_threadsafe(self.send_message2, message)
             # self.websocket.send(message)
         except Exception as e:
             cls.node_handle.get_logger().error('发送错误')
             cls.node_handle.get_logger().error(str(e))
         
-    async def send_message(self, message):
+    async def send_message2(self, message):
+        cls = self.__class__
+        
         await self.websocket.send(message)
+        cls.node_handle.get_logger().info("发送2: (%s)" % str(message))
 
         # with self._write_lock:
         #     IOLoop.instance().add_callback(partial(self.prewrite_message, message, binary))
