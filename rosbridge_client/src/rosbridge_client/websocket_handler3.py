@@ -38,7 +38,7 @@ import time
 # from rosauth.srv import Authentication
 
 import sys
-import threading
+# import threading
 import traceback
 from functools import partial, wraps
 
@@ -61,6 +61,8 @@ from std_msgs.msg import Int32
 import asyncio
 import websockets
 
+import threading
+
 def _log_exception():
     """Log the most recent exception to ROS."""
     exc = traceback.format_exception(*sys.exc_info())
@@ -78,6 +80,28 @@ def log_exceptions(f):
             raise
     return wrapper
 
+def start_asyncio():
+    loop = None
+    ready = threading.Event()
+    async def wait_forever():
+        nonlocal loop
+        loop = asyncio.get_event_loop()
+        ready.set()
+        await loop.create_future()
+    threading.Thread(daemon=True, target=asyncio.run,
+                     args=(wait_forever(),)).start()
+    ready.wait()
+    return loop
+
+def syncify(fn):
+    def syncfn(*args, **kwds):
+        # submit the original coroutine to the event loop
+        # and wait for the result
+        conc_future = asyncio.run_coroutine_threadsafe(
+            fn(*args, **kwds), _loop)
+        return conc_future.result()
+    syncfn.as_async = fn
+    return syncfn
 
 class RosbridgeWebSocketClient(object):
     client_id_seed = 1
@@ -131,7 +155,7 @@ class RosbridgeWebSocketClient(object):
             cls.node_handle.get_logger().info("Awaiting proper authentication...")
 
         self.url = url
-        self.msg = ""
+        self._loop = start_asyncio()
         # self.timeout = timeout
         # self.ioloop = IOLoop.instance()
         # self.ws = None
@@ -139,21 +163,38 @@ class RosbridgeWebSocketClient(object):
         # PeriodicCallback(self.keep_alive, 20000).start()
         # self.ioloop.start()
 
+    @syncify
+    async def open_websocket(self, uri):
+        ws = await websockets.connect(uri)
+        return ws
+
+    @syncify
+    async def send_to_websocket(self, ws, msg):
+        await ws.send(msg)
+
+    @syncify
+    async def recv_from_websocket(self, ws):
+        return await ws.recv()
+
+    # @syncify
+    # async def start_echo_server(self, host, port):
+    #     async def _echo(ws, _path):
+    #         msg = await ws.recv()
+    #         await ws.send('echo ' + msg)
+
+
     async def run(self):
         cls = self.__class__        
         async with websockets.connect(self.url) as websocket: 
             cls.node_handle.get_logger().info('已连接socket server: (%s)' % self.url)
             self.websocket = websocket
-            # self.loop = asyncio.get_running_loop()
-            while True:    
-                # if self.msg != "" :
-                await self.websocket.send(self.msg)
-                cls.node_handle.get_logger().info("发送: (%s)" % str(self.msg))
-                self.msg = ""
-                # cls.node_handle.get_logger().info('发送成功')
+            self.loop = asyncio.get_running_loop()
+            while True:     
+                await websocket.send('hahaha')
+                cls.node_handle.get_logger().info('发送成功')
                 # print(f"> {name}")
 
-                msg = await self.websocket.recv()
+                msg = await websocket.recv()
                 cls.node_handle.get_logger().info('接收: (%s)' % msg)
                 self.protocol.incoming(str(msg))
 
@@ -242,10 +283,7 @@ class RosbridgeWebSocketClient(object):
             # cls.node_handle.get_logger().info("发送: (%s)" % str(message))
             # self.ws.write_message(message)
             # self.__task = self.__loop.create_task(self.send_message)
-            # self.loop.call_soon_threadsafe(self.send_message2, message)
-            # self.websocket.send(message)
-            # self.send_message2(message)
-            self.msg = message
+            self.loop.call_soon_threadsafe(self.send_message2, message)
             # self.websocket.send(message)
         except Exception as e:
             cls.node_handle.get_logger().error('发送错误')
@@ -253,9 +291,9 @@ class RosbridgeWebSocketClient(object):
         
     async def send_message2(self, message):
         cls = self.__class__
-        cls.node_handle.get_logger().info("发送2: (%s)" % str(message))
-        await self.websocket.send(message)
         
+        await self.websocket.send(message)
+        cls.node_handle.get_logger().info("发送2: (%s)" % str(message))
 
         # with self._write_lock:
         #     IOLoop.instance().add_callback(partial(self.prewrite_message, message, binary))
