@@ -61,6 +61,7 @@ from std_msgs.msg import Int32
 from tornado.ioloop import IOLoop, PeriodicCallback
 from tornado import gen
 from tornado.websocket import websocket_connect
+import asyncio
 
 def _log_exception():
     """Log the most recent exception to ROS."""
@@ -166,13 +167,15 @@ class RosbridgeWebSocketClient(object):
             #     self.protocol.finish()
             #     break
             # cls.node_handle.get_logger().info("Received: (%s)" % str(msg))
+
+            # IOLoop.current().asyncio_loop.call_soon_threadsafe(self.protocol.incoming, msg)
             self.protocol.incoming(str(msg))
     
-    def keep_alive(self):
-        if self.ws is None:
-            self.connect()
-        else:
-            self.ws.write_message("keep alive")
+    # def keep_alive(self):
+    #     if self.ws is None:
+    #         self.connect()
+    #     else:
+    #         self.ws.write_message("keep alive")
 
     # def received_message(self, message):
     #     """
@@ -216,15 +219,65 @@ class RosbridgeWebSocketClient(object):
         # if len(message) > 65536:             
         #     return
             # print(message)
-        try:
+        with self._write_lock:
+            self.ws.write_message(message)
+            cls.node_handle.get_logger().info("发送: (%s)" % str(message))
+        # try:
             # if len(message) > 65536:             
             #     return
-            cls.node_handle.get_logger().info("Sent: (%s)" % str(message))
-            self.ws.write_message(message)
-        except Exception as e:
-            cls.node_handle.get_logger().error('发送错误')
-            cls.node_handle.get_logger().error(str(e))
+            # cls.node_handle.get_logger().info("发送: (%s)" % str(message))
+            # self.ws.write_message(message)
+        # except Exception as e:
+            # cls.node_handle.get_logger().error('发送错误')
+            # cls.node_handle.get_logger().error(str(e))
         
+        # IOLoop.instance().add_callback(partial(self.prewrite_message, message))
+        # with self._write_lock:
+        # IOLoop.current().asyncio_loop.call_soon_threadsafe(self.prewrite_message, message)
+        # IOLoop.current().run_in_executor(None, self.prewrite_message, message)
+        # try:
+        #     with self._write_lock:
+        #         # IOLoop.instance().add_callback(partial(self.prewrite_message, message))
+        #         asyncio.get_event_loop().call_soon_threadsafe(self.prewrite_message, message)
+        # except Exception as e:
+        #     cls.node_handle.get_logger().error('发送错误')
+        #     cls.node_handle.get_logger().error(str(e))
+    # @coroutine
+    # def prewrite_message(self, message):
+    #     cls = self.__class__
+    #     cls.node_handle.get_logger().info("Sent: (%s)" % str(message))
+    #     self.ws.write_message(message)
+        # Use a try block because the log decorator doesn't cooperate with @coroutine.
+        # try:
+        #     with self._write_lock:
+        #         future = self.write_message(message)
+
+        #         # When closing, self.write_message() return None even if it's an undocument output.
+        #         # Consider it as WebSocketClosedError
+        #         # For tornado versions <4.3.0 self.write_message() does not have a return value
+        #         if future is None and tornado_version_info >= (4,3,0,0):
+        #             raise WebSocketClosedError
+
+        #         yield future
+        # except WebSocketClosedError:
+        #     # cls.node_handle.get_logger().warn('WebSocketClosedError: Tried to write to a closed websocket',
+        #     #     throttle_duration_sec=1.0)
+        #     raise
+        # except StreamClosedError:
+        #     # cls.node_handle.get_logger().warn('StreamClosedError: Tried to write to a closed stream',
+        #     #     throttle_duration_sec=1.0)
+        #     raise
+        # except BadYieldError:
+        #     # Tornado <4.5.0 doesn't like its own yield and raises BadYieldError.
+        #     # This does not affect functionality, so pass silently only in this case.
+        #     if tornado_version_info < (4, 5, 0, 0):
+        #         pass
+        #     else:
+        #         _log_exception()
+        #         raise
+        # except:
+        #     _log_exception()
+        #     raise
 
         # with self._write_lock:
         #     IOLoop.instance().add_callback(partial(self.prewrite_message, message, binary))

@@ -64,7 +64,9 @@ from threading import Thread
 from tornado.ioloop import IOLoop
 from tornado.ioloop import PeriodicCallback
 from tornado.web import Application
-# from tornado.platform.asyncio import AnyThreadEventLoopPolicy
+from tornado.platform.asyncio import AnyThreadEventLoopPolicy
+
+import asyncio
 
 def start_hook():
     # asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
