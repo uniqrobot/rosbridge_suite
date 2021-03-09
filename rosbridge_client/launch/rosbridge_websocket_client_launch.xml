@@ -1,6 +1,6 @@
 <launch>
   <arg name="port" default="9090" />
-  <arg name="address" default="" />
+  <arg name="address" default="ws://www.uniqrobot.com:18888" />
   <arg name="ssl" default="false" />
   <arg name="certfile" default=""/>
   <arg name="keyfile" default="" />
@@ -23,7 +23,7 @@
 
   <arg unless="$(var bson_only_mode)" name="binary_encoder" default="default"/>
  
-  <node name="rosbridge_websocket_client" pkg="rosbridge_client" exec="rosbridge_websocket_client" output="screen">
+  <node name="rosbridge_websocket_client" pkg="rosbridge_client" exec="rosbridge_websocket_client.py" output="screen">
     <param name="authenticate" value="$(var authenticate)" />
     <param name="port" value="$(var port)"/>
     <param name="address" value="$(var address)"/>

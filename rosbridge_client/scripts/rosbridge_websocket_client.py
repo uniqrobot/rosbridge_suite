@@ -39,15 +39,12 @@ import time
 from socket import error
 
 from threading import Thread
-# from tornado.ioloop import IOLoop
-# from tornado.ioloop import PeriodicCallback
-# from tornado.web import Application
 
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy
-from std_msgs.msg import Int32
+# from std_msgs.msg import Int32
 
 # from rosbridge_server import RosbridgeWebSocket, ClientManager
 
@@ -60,12 +57,8 @@ from rosbridge_library.capabilities.call_service import CallService
 
 from rosbridge_client import RosbridgeWebSocketClient
 
-# def start_hook():
-#     IOLoop.instance().start()
-
-# def shutdown_hook():
-#     IOLoop.instance().stop()
-
+import asyncio
+from rclpy.executors import MultiThreadedExecutor
 
 class RosbridgeWebsocketClientNode(Node):
     def __init__(self):
@@ -114,7 +107,7 @@ class RosbridgeWebsocketClientNode(Node):
         # QoS profile with transient local durability (latched topic in ROS 1).
         client_count_qos_profile = QoSProfile(
             depth=10,
-            durability=QoSDurabilityPolicy.RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL
         )
 
         # Get the glob strings and parse them as arrays.
@@ -269,33 +262,53 @@ class RosbridgeWebsocketClientNode(Node):
 
         # application = Application([(r"/", RosbridgeWebSocketClient), (r"", RosbridgeWebSocketClient)], **tornado_settings)
         server_address = 'ws://www.uniqrobot.com:18888/robot/c0b5d7943d7b' #address + ':' + str(port)  #"ws://localhost:9090")
+        ws = RosbridgeWebSocketClient(server_address)   
 
-        connected = False
-        ws = None
-        while not connected and self.context.ok():
-            try:
-                if certfile is not None and keyfile is not None:
-                    ws = RosbridgeWebSocketClient(
-                    server_address,
-                    ssl_options={
-                        "certfile": certfile,
-                        "keyfile": keyfile
-                    })
-                    ws.connect()
-                else:
-                    ws = RosbridgeWebSocketClient(server_address)
-                    ws.open()
-                    ws.connect()
-                self.get_logger().info("Rosbridge WebSocket connected on {}".format(server_address))
-                connected = True
-            except error as e:
-                self.get_logger().warn(
-                    "Unable to access server: {} "
-                    "Retrying in {}s.".format(e, retry_startup_delay))
-                time.sleep(retry_startup_delay)
-   
-    def __del__(self):#当程序结束时运行
-        ws.close()
+        self.__loop = asyncio.new_event_loop()
+        self.__task: Optional[Task] = None
+        self.__thread = Thread(target=self.__loop.run_forever)
+        self.__thread.start()
+        self.done = False
+
+        self.__loop.call_soon_threadsafe(self.__create_task, ws.run())
+             
+        # connected = False
+        # ws = None
+        # while not connected and self.context.ok():
+        #     try:
+        #         if certfile is not None and keyfile is not None:
+        #             ws = RosbridgeWebSocketClient(
+        #             server_address,
+        #             ssl_options={
+        #                 "certfile": certfile,
+        #                 "keyfile": keyfile
+        #             })
+        #             # ws.connect()
+        #         else:
+        #             ws = RosbridgeWebSocketClient(server_address, protocols=['http-only', 'chat'])                    
+        #             # ws.connect()
+                
+        #         ws.open()
+        #         ws.connect()
+        #         self.get_logger().info("Rosbridge WebSocket connected on {}".format(server_address))
+        #         connected = True
+        #     except error as e:
+        #         self.get_logger().warn(
+        #             "Unable to access server: {} "
+        #             "Retrying in {}s.".format(e, retry_startup_delay))
+        #         time.sleep(retry_startup_delay)
+    
+    def __create_task(self, f):
+        self.__task = self.__loop.create_task(f)
+
+    def __del__(self):
+        print("stopping loop")
+        self.done = True
+        if self.__task is not None:
+            self.__task.cancel()
+            
+        self.__loop.stop()
+        self.__thread.join()
 
 def main(args=None):
     if args is None:
@@ -303,21 +316,29 @@ def main(args=None):
 
     rclpy.init(args=args)
     rosbridge_websocket_client_node = RosbridgeWebsocketClientNode()
+    
+    executor = MultiThreadedExecutor()
+    executor.add_node(rosbridge_websocket_client_node)
+    executor.spin()
+    
+    # rclpy.shutdown()
+    # try:
+    #     # while rclpy.ok():
+    #     #     rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01)
+    #     #     rate.sleep()
+    #     # start_hook()
+    #     rclpy.spin(rosbridge_websocket_client_node)
+    # except KeyboardInterrupt:
+    #     pass
+       
+    # # spin_callback = PeriodicCallback(lambda: rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01), 5)
+    # # spin_callback.start()
+    # # start_hook()
 
-    # spin_callback = PeriodicCallback(lambda: rclpy.spin_once(rosbridge_websocket_node, timeout_sec=0.01), 1)
-    # spin_callback.start()
-    # start_hook()
-    rate = rosbridge_websocket_client_node.create_rate(1)
-    try:
-        while rclpy.ok():
-            rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01)
-            rate.sleep()
-    except KeyboardInterrupt:
-        pass
-
-    rosbridge_websocket_client_node.destroy_node()
-    rclpy.shutdown()
+    # rosbridge_websocket_client_node.destroy_node()
+    # rclpy.shutdown()
     # shutdown_hook()  # shutdown hook to stop the server
 
 if __name__ == '__main__':
     main()
+
