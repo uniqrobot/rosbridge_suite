@@ -219,6 +219,7 @@ class RosbridgeWebSocketClient(object):
         try:
             # if len(message) > 65536:             
             #     return
+            cls.node_handle.get_logger().info("Sent: (%s)" % str(message))
             self.ws.write_message(message)
         except Exception as e:
             cls.node_handle.get_logger().error('发送错误')
