@@ -42,26 +42,11 @@ import threading
 import traceback
 from functools import partial, wraps
 
-# from tornado import version_info as tornado_version_info
-# from tornado.ioloop import IOLoop
-# from tornado.iostream import StreamClosedError
-# from tornado.websocket import WebSocketHandler, WebSocketClosedError
-# from tornado.gen import coroutine, BadYieldError
-
 from rosbridge_library.rosbridge_protocol import RosbridgeProtocol
 from rosbridge_library.util import json, bson
 
-from std_msgs.msg import Int32
-
-# from ws4py.client.threadedclient import WebSocketClient
-
-# from ws4py.client.tornadoclient import TornadoWebSocketClient
-# from tornado import ioloop
-
-from tornado.ioloop import IOLoop, PeriodicCallback
-from tornado import gen
-from tornado.websocket import websocket_connect
-import asyncio
+from autobahn.twisted.websocket import WebSocketClientProtocol, WebSocketClientFactory
+    
 
 def _log_exception():
     """Log the most recent exception to ROS."""
@@ -81,9 +66,8 @@ def log_exceptions(f):
     return wrapper
 
 
-class RosbridgeWebSocketClient(object):
-    client_id_seed = 1
-    # clients_connected = 0
+class RosbridgeWebSocketClient(WebSocketClientProtocol):
+    client_id_seed = 1   
     # authenticate = False
     # use_compression = False
 
@@ -100,7 +84,8 @@ class RosbridgeWebSocketClient(object):
 
 
     @log_exceptions
-    def __init__(self, url): #, timeout):
+    def __init__(self): #, timeout):   
+        super().__init__()     
         cls = self.__class__
         parameters = {
             "fragment_timeout": cls.fragment_timeout,
@@ -115,219 +100,55 @@ class RosbridgeWebSocketClient(object):
             # self.set_nodelay(True)
             self.authenticated = False
             self._write_lock = threading.RLock()
-            # self.stream.max_buffer_size = 256 * 1024 * 1024
-            # self.reading_buffer_size = 10000000
-            # cls.client_id_seed += 1
-            # cls.clients_connected += 1
-            # self.client_id = uuid.uuid4()
-            # if cls.client_manager:
-                # cls.client_manager.add_client(self.client_id, self.request.remote_ip)
-            # self.connect()
-            # self.run_forever()
+
         except Exception as exc:
             cls.node_handle.get_logger().error("Connect to server failed.  Reason: {}".format(exc))
 
-        # cls.node_handle.get_logger().info("Client connected")
-        # cls.node_handle.get_logger().info("Client connected. {} clients total.".format(cls.clients_connected))
         if cls.authenticate:
             cls.node_handle.get_logger().info("Awaiting proper authentication...")
 
-        self.url = url
-        # self.timeout = timeout
-        # self.ioloop = IOLoop.instance()
-        self.ws = None
-        self.connect()
-        # PeriodicCallback(self.keep_alive, 20000).start()
-        # self.ioloop.start()
 
-    @gen.coroutine
-    def connect(self):
+    def onConnect(self, response):
         cls = self.__class__
-        cls.node_handle.get_logger().info("trying to connect")
-        try:
-            self.ws = yield websocket_connect(self.url)
-        except Exception as e:
-            cls.node_handle.get_logger().error("connection error")
+        cls.node_handle.get_logger().info("websocket连接成功: {0}".format(response.peer))       
+
+    def onConnecting(self, transport_details):
+        cls = self.__class__
+        cls.node_handle.get_logger().info("正在连接websocket: {}".format(transport_details))       
+        return None 
+
+    # def onOpen(self):
+    #     cls = self.__class__
+    #     print("WebSocket connection open.")
+
+    #     def hello():
+    #         self.sendMessage("Hello, world!".encode('utf8'))
+    #         self.sendMessage(b"\x00\x01\x03\x04", isBinary=True)
+    #         self.factory.reactor.callLater(1, hello)
+
+    #     # start sending messages every second ..
+    #     hello()
+
+    def onMessage(self, payload, isBinary):
+        cls = self.__class__
+        if isBinary:
+            cls.node_handle.get_logger().info("收到二进制数据: {0} bytes".format(len(payload)))          
         else:
-            cls.node_handle.get_logger().info("connected")
-            self.run()
+            # print("Text message received: {0}".format(payload.decode('utf8')))
+            cls.node_handle.get_logger().debug("websocket收到数据: (%s)" % str(payload))
+            self.protocol.incoming(payload.decode('utf8'))
 
-    @gen.coroutine
-    def run(self):
+    def onClose(self, wasClean, code, reason):
         cls = self.__class__
-        while True:
-            try:
-                msg = yield self.ws.read_message()
-            except Exception as e:
-                cls.node_handle.get_logger().error('接收错误')
-                cls.node_handle.get_logger().error(str(e))
-            # if msg is None:
-            #     cls.node_handle.get_logger().info("connection closed")
-            #     self.ws = None
-            #     self.protocol.finish()
-            #     break
-            # cls.node_handle.get_logger().info("Received: (%s)" % str(msg))
+        cls.node_handle.get_logger().info("websocket断开: {0} {1}".format(code, reason))  
 
-            # IOLoop.current().asyncio_loop.call_soon_threadsafe(self.protocol.incoming, msg)
-            self.protocol.incoming(str(msg))
-    
-    # def keep_alive(self):
-    #     if self.ws is None:
-    #         self.connect()
-    #     else:
-    #         self.ws.write_message("keep alive")
-
-    # def received_message(self, message):
-    #     """
-    #     Process incoming from server
-    #     """
-    #     cls = self.__class__
-    #     # cls.node_handle.get_logger().info("Received: (%s)" % str(message))
-    #     # if type(message) is bytes:
-    #     #     message = message.decode('utf-8')
-    #     self.protocol.incoming(str(message))
-   
-    # @log_exceptions
-    # def closed(self, code, reason=None):
-    #     """
-    #     Called by the server when the websocket stream and connection are
-    #     finally closed
-    #     """
-    #     cls = self.__class__
-    #     # rospy.loginfo("Closed")
-    #     self.protocol.finish()
-    #     # ioloop.IOLoop.instance().stop()
-    #     cls.node_handle.get_logger().info("Closed. (%s, %s)" %( code, reason))
- 
-    def outgoing_message(self, message):
-        # if type(message) == bson.BSON:
-        #     binary = True
-        # elif type(message) == bytearray:
-        #     binary = True
-        #     message = bytes(message)
-        # else:
-        #     binary = False
-
-        cls = self.__class__
-        # cls.node_handle.get_logger().info("Sent: (%s)" % str(message))
-        # with self._write_lock:
-            # if len(message) < 65536:   #消息大于65536会报错
-        # print(time.asctime( time.localtime(time.time())))
-        # print('---------------------------------------')
-        # print(len(message))
-        # print(message)
-        # if len(message) > 65536:             
-        #     return
-            # print(message)
-        with self._write_lock:
-            self.ws.write_message(message)
-            cls.node_handle.get_logger().info("发送: (%s)" % str(message))
-        # try:
-            # if len(message) > 65536:             
-            #     return
-            # cls.node_handle.get_logger().info("发送: (%s)" % str(message))
-            # self.ws.write_message(message)
-        # except Exception as e:
-            # cls.node_handle.get_logger().error('发送错误')
-            # cls.node_handle.get_logger().error(str(e))
-        
-        # IOLoop.instance().add_callback(partial(self.prewrite_message, message))
-        # with self._write_lock:
-        # IOLoop.current().asyncio_loop.call_soon_threadsafe(self.prewrite_message, message)
-        # IOLoop.current().run_in_executor(None, self.prewrite_message, message)
-        # try:
-        #     with self._write_lock:
-        #         # IOLoop.instance().add_callback(partial(self.prewrite_message, message))
-        #         asyncio.get_event_loop().call_soon_threadsafe(self.prewrite_message, message)
-        # except Exception as e:
-        #     cls.node_handle.get_logger().error('发送错误')
-        #     cls.node_handle.get_logger().error(str(e))
-    # @coroutine
-    # def prewrite_message(self, message):
-    #     cls = self.__class__
-    #     cls.node_handle.get_logger().info("Sent: (%s)" % str(message))
-    #     self.ws.write_message(message)
-        # Use a try block because the log decorator doesn't cooperate with @coroutine.
-        # try:
-        #     with self._write_lock:
-        #         future = self.write_message(message)
-
-        #         # When closing, self.write_message() return None even if it's an undocument output.
-        #         # Consider it as WebSocketClosedError
-        #         # For tornado versions <4.3.0 self.write_message() does not have a return value
-        #         if future is None and tornado_version_info >= (4,3,0,0):
-        #             raise WebSocketClosedError
-
-        #         yield future
-        # except WebSocketClosedError:
-        #     # cls.node_handle.get_logger().warn('WebSocketClosedError: Tried to write to a closed websocket',
-        #     #     throttle_duration_sec=1.0)
-        #     raise
-        # except StreamClosedError:
-        #     # cls.node_handle.get_logger().warn('StreamClosedError: Tried to write to a closed stream',
-        #     #     throttle_duration_sec=1.0)
-        #     raise
-        # except BadYieldError:
-        #     # Tornado <4.5.0 doesn't like its own yield and raises BadYieldError.
-        #     # This does not affect functionality, so pass silently only in this case.
-        #     if tornado_version_info < (4, 5, 0, 0):
-        #         pass
-        #     else:
-        #         _log_exception()
-        #         raise
-        # except:
-        #     _log_exception()
-        #     raise
-
-        # with self._write_lock:
-        #     IOLoop.instance().add_callback(partial(self.prewrite_message, message, binary))
-
-    # @coroutine
-    # def prewrite_message(self, message, binary):
-    #     cls = self.__class__
-    #     # Use a try block because the log decorator doesn't cooperate with @coroutine.
-    #     try:
-    #         with self._write_lock:
-    #             future = self.write_message(message, binary)
-
-    #             # When closing, self.write_message() return None even if it's an undocument output.
-    #             # Consider it as WebSocketClosedError
-    #             # For tornado versions <4.3.0 self.write_message() does not have a return value
-    #             if future is None and tornado_version_info >= (4,3,0,0):
-    #                 raise WebSocketClosedError
-
-    #             yield future
-    #     except WebSocketClosedError:
-    #         cls.node_handle.get_logger().warn('WebSocketClosedError: Tried to write to a closed websocket',
-    #             throttle_duration_sec=1.0)
-    #         raise
-    #     except StreamClosedError:
-    #         cls.node_handle.get_logger().warn('StreamClosedError: Tried to write to a closed stream',
-    #             throttle_duration_sec=1.0)
-    #         raise
-    #     except BadYieldError:
-    #         # Tornado <4.5.0 doesn't like its own yield and raises BadYieldError.
-    #         # This does not affect functionality, so pass silently only in this case.
-    #         if tornado_version_info < (4, 5, 0, 0):
-    #             pass
-    #         else:
-    #             _log_exception()
-    #             raise
-    #     except:
-    #         _log_exception()
-    #         raise
-
-    # @log_exceptions
-    # def check_origin(self, origin):
-    #     return True
-
-    # @log_exceptions
-    # def get_compression_options(self):
-    #     # If this method returns None (the default), compression will be disabled.
-    #     # If it returns a dict (even an empty one), it will be enabled.
-    #     cls = self.__class__
-
-    #     if not cls.use_compression:
-    #         return None
-
-    #     return {}
+    def outgoing_message(self, message):      
+        cls = self.__class__     
+        try:
+            with self._write_lock:
+                # if len(message) < 65536: 
+                cls.node_handle.get_logger().debug("websocket发送数据: (%s)" % str(message))                                 
+                self.sendMessage(message.encode('utf8')) #.encode('utf8'))
+        except Exception as e:
+            cls.node_handle.get_logger().error('websocket数据发送错误:%s' % str(e))
+       

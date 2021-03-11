@@ -1,35 +1,4 @@
 #!/usr/bin/env python3
-# Software License Agreement (BSD License)
-#
-# Copyright (c) 2012, Willow Garage, Inc.
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions
-# are met:
-#
-#  * Redistributions of source code must retain the above copyright
-#    notice, this list of conditions and the following disclaimer.
-#  * Redistributions in binary form must reproduce the above
-#    copyright notice, this list of conditions and the following
-#    disclaimer in the documentation and/or other materials provided
-#    with the distribution.
-#  * Neither the name of Willow Garage, Inc. nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
 
 from __future__ import print_function
 
@@ -37,19 +6,12 @@ import sys
 import time
 
 from socket import error
-
 from threading import Thread
-# from tornado.ioloop import IOLoop
-# from tornado.ioloop import PeriodicCallback
-# from tornado.web import Application
 
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy
-from std_msgs.msg import Int32
-
-# from rosbridge_server import RosbridgeWebSocket, ClientManager
 
 from rosbridge_library.capabilities.advertise import Advertise
 from rosbridge_library.capabilities.publish import Publish
@@ -60,12 +22,9 @@ from rosbridge_library.capabilities.call_service import CallService
 
 from rosbridge_client import RosbridgeWebSocketClient
 
-# def start_hook():
-#     IOLoop.instance().start()
-
-# def shutdown_hook():
-#     IOLoop.instance().stop()
-
+# from twisted.python import log
+from twisted.internet import reactor
+from autobahn.twisted.websocket import WebSocketClientFactory
 
 class RosbridgeWebsocketClientNode(Node):
     def __init__(self):
@@ -106,15 +65,16 @@ class RosbridgeWebsocketClientNode(Node):
         # if authentication should be used
         RosbridgeWebSocketClient.authenticate = self.declare_parameter('authenticate', False).value
 
-        port = self.declare_parameter('port', 9090).value
-
+        port = self.declare_parameter('port', 1888).value
         address = self.declare_parameter('address', '').value
+        domain = self.declare_parameter('domain', '').value
+        robot_id = self.declare_parameter('robot_id', '').value
 
         # Publisher for number of connected clients
         # QoS profile with transient local durability (latched topic in ROS 1).
         client_count_qos_profile = QoSProfile(
             depth=10,
-            durability=QoSDurabilityPolicy.RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL
         )
 
         # Get the glob strings and parse them as arrays.
@@ -265,37 +225,18 @@ class RosbridgeWebsocketClientNode(Node):
 
         ##################################################
         # Done with parameter handling                   #
-        ##################################################
+        ##################################################        
+        server_address = 'ws://' + domain + ':' + str(port) + '/robot/'+robot_id #c0b5d7943d7b' #address + ':' + str(port)  #"ws://localhost:9090")      
+        
+        factory = WebSocketClientFactory(server_address)        
+        factory.protocol = RosbridgeWebSocketClient       
+        # factory.setProtocolOptions(autoFragmentSize=655360)        
+        reactor.connectTCP(domain, port, factory)
+        self.__thread = Thread(target=reactor.run, args=(False,))
+        self.__thread.start()
 
-        # application = Application([(r"/", RosbridgeWebSocketClient), (r"", RosbridgeWebSocketClient)], **tornado_settings)
-        server_address = 'ws://www.uniqrobot.com:18888/robot/c0b5d7943d7b' #address + ':' + str(port)  #"ws://localhost:9090")
-
-        connected = False
-        ws = None
-        while not connected and self.context.ok():
-            try:
-                if certfile is not None and keyfile is not None:
-                    ws = RosbridgeWebSocketClient(
-                    server_address,
-                    ssl_options={
-                        "certfile": certfile,
-                        "keyfile": keyfile
-                    })
-                    ws.connect()
-                else:
-                    ws = RosbridgeWebSocketClient(server_address)
-                    ws.open()
-                    ws.connect()
-                self.get_logger().info("Rosbridge WebSocket connected on {}".format(server_address))
-                connected = True
-            except error as e:
-                self.get_logger().warn(
-                    "Unable to access server: {} "
-                    "Retrying in {}s.".format(e, retry_startup_delay))
-                time.sleep(retry_startup_delay)
-   
-    def __del__(self):#当程序结束时运行
-        ws.close()
+    def __del__(self):        
+        self.__thread.join()
 
 def main(args=None):
     if args is None:
@@ -303,21 +244,21 @@ def main(args=None):
 
     rclpy.init(args=args)
     rosbridge_websocket_client_node = RosbridgeWebsocketClientNode()
-
-    # spin_callback = PeriodicCallback(lambda: rclpy.spin_once(rosbridge_websocket_node, timeout_sec=0.01), 1)
-    # spin_callback.start()
-    # start_hook()
-    rate = rosbridge_websocket_client_node.create_rate(1)
+    # rate = rosbridge_websocket_client_node.create_rate(1000)
+    
     try:
         while rclpy.ok():
             rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01)
-            rate.sleep()
+            # rate.sleep()
+        # start_hook()
+        # rclpy.spin(rosbridge_websocket_client_node)
     except KeyboardInterrupt:
-        pass
-
+        pass   
+    
     rosbridge_websocket_client_node.destroy_node()
     rclpy.shutdown()
-    # shutdown_hook()  # shutdown hook to stop the server
+   
 
 if __name__ == '__main__':
     main()
+

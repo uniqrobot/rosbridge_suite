@@ -11,7 +11,7 @@ ament_package()
 
 install(PROGRAMS
   scripts/rosbridge_websocket_client.py
-  scripts/rosbridge_websocket_client
+  # scripts/rosbridge_websocket_client
  # scripts/rosbridge_websocket
  # scripts/rosbridge_tcp.py
  # scripts/rosbridge_tcp
