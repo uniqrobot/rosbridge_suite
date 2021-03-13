@@ -136,7 +136,7 @@ class RosbridgeWebSocketClient(WebSocketClientProtocol):
         else:
             # print("Text message received: {0}".format(payload.decode('utf8')))
             cls.node_handle.get_logger().debug("websocket收到数据: (%s)" % str(payload))
-            self.protocol.incoming(payload.decode('utf8',"ignore"))
+            self.protocol.incoming(payload) #payload.decode('utf8',"ignore"))
 
     def onClose(self, wasClean, code, reason):
         cls = self.__class__
@@ -148,7 +148,7 @@ class RosbridgeWebSocketClient(WebSocketClientProtocol):
             with self._write_lock:
                 # if len(message) < 65536: 
                 cls.node_handle.get_logger().debug("websocket发送数据: (%s)" % str(message))                                 
-                self.sendMessage(message.encode('utf8',"ignore")) #.encode('utf8'))
+                self.sendMessage(message) #message.encode('utf8',"ignore")) #.encode('utf8'))
         except Exception as e:
             cls.node_handle.get_logger().error('websocket数据发送错误:%s' % str(e))
        
