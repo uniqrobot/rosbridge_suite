@@ -110,11 +110,11 @@ class RosbridgeWebSocketClient(WebSocketClientProtocol):
 
     def onConnect(self, response):
         cls = self.__class__
-        cls.node_handle.get_logger().info("websocket连接成功: {0}".format(response.peer))       
+        cls.node_handle.get_logger().info("websocket connected: {0}".format(response.peer))       
 
     def onConnecting(self, transport_details):
         cls = self.__class__
-        cls.node_handle.get_logger().info("正在连接websocket: {}".format(transport_details))       
+        cls.node_handle.get_logger().info("websocket connecting...: {}".format(transport_details))       
         return None 
 
     # def onOpen(self):
@@ -132,23 +132,23 @@ class RosbridgeWebSocketClient(WebSocketClientProtocol):
     def onMessage(self, payload, isBinary):
         cls = self.__class__
         if isBinary:
-            cls.node_handle.get_logger().info("收到二进制数据: {0} bytes".format(len(payload)))          
+            cls.node_handle.get_logger().info("Received binary data: {0} bytes".format(len(payload)))          
         else:
             # print("Text message received: {0}".format(payload.decode('utf8')))
-            cls.node_handle.get_logger().debug("websocket收到数据: (%s)" % str(payload))
-            self.protocol.incoming(payload) #payload.decode('utf8',"ignore"))
+            cls.node_handle.get_logger().debug("websocket received: (%s)" % str(payload))
+            self.protocol.incoming(payload.decode('utf8',"ignore"))
 
     def onClose(self, wasClean, code, reason):
         cls = self.__class__
-        cls.node_handle.get_logger().info("websocket断开: {0} {1}".format(code, reason))  
+        cls.node_handle.get_logger().info("websocket disconnected: {0} {1}".format(code, reason))  
 
     def outgoing_message(self, message):      
         cls = self.__class__     
         try:
             with self._write_lock:
                 # if len(message) < 65536: 
-                cls.node_handle.get_logger().debug("websocket发送数据: (%s)" % str(message))                                 
-                self.sendMessage(message) #message.encode('utf8',"ignore")) #.encode('utf8'))
+                cls.node_handle.get_logger().debug("websocket sent: (%s)" % str(message))                                 
+                self.sendMessage(message.encode('utf8',"ignore")) #.encode('utf8'))
         except Exception as e:
-            cls.node_handle.get_logger().error('websocket数据发送错误:%s' % str(e))
+            cls.node_handle.get_logger().error('websocket error:%s' % str(e))
        
