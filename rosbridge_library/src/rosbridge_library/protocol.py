@@ -129,7 +129,8 @@ class Protocol:
         try:
             msg = self.deserialize(self.buffer)
             self.buffer = ""
-
+            self.node_handle.get_logger().info('Incoming: %s' % message_string)
+           
         # if loading whole object fails try to load part of it (from first opening bracket "{" to next closing bracket "}"
         # .. this causes Exceptions on "inner" closing brackets --> so I suppressed logging of deserialization errors
         except Exception as e:
@@ -176,7 +177,6 @@ class Protocol:
         # if decoding of buffer failed .. simply return
         if msg is None:
             return
-
         # process fields JSON-message object that "control" rosbridge
         mid = None
         if "id" in msg:
@@ -200,7 +200,6 @@ class Protocol:
             self.delay_between_messages = msg["message_intervall"]
         if "png" in msg.keys():
             self.png = msg["msg"]
-
         # now try to pass message to according operation
         try:
             self.operations[op](msg)

@@ -249,9 +249,9 @@ def main(args=None):
     try:
         while rclpy.ok():
             rclpy.spin_once(rosbridge_websocket_client_node, timeout_sec=0.01)
-            # rate.sleep()
-        # start_hook()
-        # rclpy.spin(rosbridge_websocket_client_node)
+            # rclpy.spin_once(rosbridge_websocket_client_node) #, timeout_sec=0.01)
+            # time.sleep(0.001)       
+            # rclpy.spin(rosbridge_websocket_client_node)
     except KeyboardInterrupt:
         pass   
     

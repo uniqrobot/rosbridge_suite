@@ -135,20 +135,23 @@ class RosbridgeWebSocketClient(WebSocketClientProtocol):
             cls.node_handle.get_logger().info("Received binary data: {0} bytes".format(len(payload)))          
         else:
             # print("Text message received: {0}".format(payload.decode('utf8')))
-            cls.node_handle.get_logger().debug("websocket received: (%s)" % str(payload))
-            self.protocol.incoming(payload.decode('utf8',"ignore"))
+            cls.node_handle.get_logger().debug("received: (%s)" % str(payload))            
+            try:
+                self.protocol.incoming(payload.decode('utf8',"ignore"))
+            except Exception as e:
+                cls.node_handle.get_logger().error("received error: (%s)" % str(e))
 
     def onClose(self, wasClean, code, reason):
         cls = self.__class__
-        cls.node_handle.get_logger().info("websocket disconnected: {0} {1}".format(code, reason))  
+        cls.node_handle.get_logger().info("disconnected: {0} {1}".format(code, reason))  
 
     def outgoing_message(self, message):      
         cls = self.__class__     
         try:
             with self._write_lock:
                 # if len(message) < 65536: 
-                cls.node_handle.get_logger().debug("websocket sent: (%s)" % str(message))                                 
+                cls.node_handle.get_logger().debug("sent: (%s)" % str(message))                                 
                 self.sendMessage(message.encode('utf8',"ignore")) #.encode('utf8'))
         except Exception as e:
-            cls.node_handle.get_logger().error('websocket error:%s' % str(e))
+            cls.node_handle.get_logger().error('send error:%s' % str(e))
        
