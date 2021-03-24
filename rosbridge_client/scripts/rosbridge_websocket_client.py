@@ -26,6 +26,44 @@ from rosbridge_client import RosbridgeWebSocketClient
 from twisted.internet import reactor
 from autobahn.twisted.websocket import WebSocketClientFactory
 
+from twisted.internet.protocol import ReconnectingClientFactory    
+from autobahn.twisted.websocket import WebSocketClientFactory, \
+    WebSocketClientProtocol, \
+    connectWS
+
+class EchoClientProtocol(WebSocketClientProtocol):
+
+    def sendHello(self):
+        self.sendMessage("Hello, world!".encode('utf8'))
+
+    def onOpen(self):
+        self.sendHello()
+
+    def onMessage(self, payload, isBinary):
+        if not isBinary:
+            print("Text message received: {}".format(payload.decode('utf8')))
+        reactor.callLater(1, self.sendHello)
+        
+class EchoClientFactory(ReconnectingClientFactory, WebSocketClientFactory):
+
+    protocol = EchoClientProtocol
+
+    # http://twistedmatrix.com/documents/current/api/twisted.internet.protocol.ReconnectingClientFactory.html
+    #
+    maxDelay = 10
+    maxRetries = 5
+
+    def startedConnecting(self, connector):
+        print('Started to connect.')
+
+    def clientConnectionLost(self, connector, reason):
+        print('Lost connection. Reason: {}'.format(reason))
+        ReconnectingClientFactory.clientConnectionLost(self, connector, reason)
+
+    def clientConnectionFailed(self, connector, reason):
+        print('Connection failed. Reason: {}'.format(reason))
+        ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
+
 class RosbridgeWebsocketClientNode(Node):
     def __init__(self):
         super().__init__('rosbridge_websocket_client')
@@ -69,7 +107,7 @@ class RosbridgeWebsocketClientNode(Node):
         address = self.declare_parameter('address', '').value
         domain = self.declare_parameter('domain', '').value
         robot_id = self.declare_parameter('robot_id', '').value
-
+       
         # Publisher for number of connected clients
         # QoS profile with transient local durability (latched topic in ROS 1).
         client_count_qos_profile = QoSProfile(
