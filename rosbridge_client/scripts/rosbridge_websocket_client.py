@@ -31,37 +31,43 @@ from autobahn.twisted.websocket import WebSocketClientFactory, \
     WebSocketClientProtocol, \
     connectWS
 
-class EchoClientProtocol(WebSocketClientProtocol):
+# class EchoClientProtocol(WebSocketClientProtocol):
 
-    def sendHello(self):
-        self.sendMessage("Hello, world!".encode('utf8'))
+#     def sendHello(self):
+#         self.sendMessage("Hello, world!".encode('utf8'))
 
-    def onOpen(self):
-        self.sendHello()
+#     def onOpen(self):
+#         self.sendHello()
 
-    def onMessage(self, payload, isBinary):
-        if not isBinary:
-            print("Text message received: {}".format(payload.decode('utf8')))
-        reactor.callLater(1, self.sendHello)
+#     def onMessage(self, payload, isBinary):
+#         if not isBinary:
+#             print("Text message received: {}".format(payload.decode('utf8')))
+#         reactor.callLater(1, self.sendHello)
         
-class EchoClientFactory(ReconnectingClientFactory, WebSocketClientFactory):
+class RosbridgeWebsocketClientFactory(ReconnectingClientFactory, WebSocketClientFactory):
 
-    protocol = EchoClientProtocol
+    node_handle = None
+
+    protocol = RosbridgeWebSocketClient
 
     # http://twistedmatrix.com/documents/current/api/twisted.internet.protocol.ReconnectingClientFactory.html
-    #
+    # https://github.com/crossbario/autobahn-python/blob/master/examples/twisted/websocket/echo_variants/client_reconnecting.py
+
     maxDelay = 10
-    maxRetries = 5
+    maxRetries = 1000
 
     def startedConnecting(self, connector):
-        print('Started to connect.')
+        cls = self.__class__       
+        cls.node_handle.get_logger().info('Started to connect.')
 
     def clientConnectionLost(self, connector, reason):
-        print('Lost connection. Reason: {}'.format(reason))
+        cls = self.__class__       
+        cls.node_handle.get_logger().info('Lost connection. Reason: {}'.format(reason))
         ReconnectingClientFactory.clientConnectionLost(self, connector, reason)
 
     def clientConnectionFailed(self, connector, reason):
-        print('Connection failed. Reason: {}'.format(reason))
+        cls = self.__class__       
+        cls.node_handle.get_logger().info('Connection failed. Reason: {}'.format(reason))
         ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
 
 class RosbridgeWebsocketClientNode(Node):
@@ -69,6 +75,7 @@ class RosbridgeWebsocketClientNode(Node):
         super().__init__('rosbridge_websocket_client')
 
         RosbridgeWebSocketClient.node_handle = self
+        RosbridgeWebsocketClientFactory.node_handle = self
 
         ##################################################
         # Parameter handling                             #
@@ -266,10 +273,14 @@ class RosbridgeWebsocketClientNode(Node):
         ##################################################        
         server_address = 'ws://' + domain + ':' + str(port) + '/robot/'+robot_id #c0b5d7943d7b' #address + ':' + str(port)  #"ws://localhost:9090")      
         
-        factory = WebSocketClientFactory(server_address)        
-        factory.protocol = RosbridgeWebSocketClient       
-        # factory.setProtocolOptions(autoFragmentSize=655360)        
-        reactor.connectTCP(domain, port, factory)
+        # factory = WebSocketClientFactory(server_address)        
+        # factory.protocol = RosbridgeWebSocketClient  
+        # reactor.connectTCP(domain, port, factory)
+        # self.__thread = Thread(target=reactor.run, args=(False,))
+        # self.__thread.start()
+
+        factory = RosbridgeWebsocketClientFactory(server_address)
+        connectWS(factory)      
         self.__thread = Thread(target=reactor.run, args=(False,))
         self.__thread.start()
 
