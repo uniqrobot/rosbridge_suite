@@ -31,6 +31,7 @@ from autobahn.twisted.websocket import WebSocketClientFactory, \
     WebSocketClientProtocol, \
     connectWS
 
+import diagnostic_updater
 # class EchoClientProtocol(WebSocketClientProtocol):
 
 #     def sendHello(self):
@@ -46,8 +47,7 @@ from autobahn.twisted.websocket import WebSocketClientFactory, \
         
 class RosbridgeWebsocketClientFactory(ReconnectingClientFactory, WebSocketClientFactory):
 
-    node_handle = None
-
+    node_handle = None   
     protocol = RosbridgeWebSocketClient
 
     # http://twistedmatrix.com/documents/current/api/twisted.internet.protocol.ReconnectingClientFactory.html
@@ -59,7 +59,7 @@ class RosbridgeWebsocketClientFactory(ReconnectingClientFactory, WebSocketClient
     def startedConnecting(self, connector):
         cls = self.__class__       
         cls.node_handle.get_logger().info('Started to connect.')
-
+       
     def clientConnectionLost(self, connector, reason):
         cls = self.__class__       
         cls.node_handle.get_logger().info('Lost connection. Reason: {}'.format(reason))
@@ -75,7 +75,8 @@ class RosbridgeWebsocketClientNode(Node):
         super().__init__('rosbridge_websocket_client')
 
         RosbridgeWebSocketClient.node_handle = self
-        RosbridgeWebsocketClientFactory.node_handle = self
+        RosbridgeWebSocketClient.updater = diagnostic_updater.Updater(self)
+        RosbridgeWebsocketClientFactory.node_handle = self        
 
         ##################################################
         # Parameter handling                             #
