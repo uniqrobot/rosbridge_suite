@@ -47,7 +47,7 @@ from rosbridge_library.util import json, bson
 
 from autobahn.twisted.websocket import WebSocketClientProtocol, WebSocketClientFactory
 
-import diagnostic_updater    
+# import diagnostic_updater    
 
 def _log_exception():
     """Log the most recent exception to ROS."""
@@ -109,13 +109,13 @@ class RosbridgeWebSocketClient(WebSocketClientProtocol):
         if cls.authenticate:
             cls.node_handle.get_logger().info("Awaiting proper authentication...")
         
-        cls.updater.add('cloud-connection updater', self.connection_diagnostics)
-        self.connection_state = 0
+        # cls.updater.add('cloud-connection updater', self.connection_diagnostics)
+        # self.connection_state = 0
 
     def onConnect(self, response):
         cls = self.__class__
         cls.node_handle.get_logger().info("websocket connected: {0}".format(response.peer))   
-        self.connection_state = 1    
+        # self.connection_state = 1    
 
     def onConnecting(self, transport_details):
         cls = self.__class__
@@ -149,7 +149,7 @@ class RosbridgeWebSocketClient(WebSocketClientProtocol):
     def onClose(self, wasClean, code, reason):
         cls = self.__class__
         cls.node_handle.get_logger().info("disconnected: {0} {1}".format(code, reason))  
-        self.connection_state = 0   
+        # self.connection_state = 0   
 
     def outgoing_message(self, message):      
         cls = self.__class__     
@@ -161,6 +161,6 @@ class RosbridgeWebSocketClient(WebSocketClientProtocol):
         except Exception as e:
             cls.node_handle.get_logger().error('send error:%s' % str(e))
        
-    def connection_diagnostics(self, stat):        
-        stat.add('connection_state', str(self.connection_state))
-        return stat
+    # def connection_diagnostics(self, stat):        
+    #     stat.add('connection_state', str(self.connection_state))
+    #     return stat

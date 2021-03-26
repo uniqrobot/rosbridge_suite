@@ -31,7 +31,7 @@ from autobahn.twisted.websocket import WebSocketClientFactory, \
     WebSocketClientProtocol, \
     connectWS
 
-import diagnostic_updater
+# import diagnostic_updater
 # class EchoClientProtocol(WebSocketClientProtocol):
 
 #     def sendHello(self):
@@ -75,7 +75,7 @@ class RosbridgeWebsocketClientNode(Node):
         super().__init__('rosbridge_websocket_client')
 
         RosbridgeWebSocketClient.node_handle = self
-        RosbridgeWebSocketClient.updater = diagnostic_updater.Updater(self)
+        # RosbridgeWebSocketClient.updater = diagnostic_updater.Updater(self)
         RosbridgeWebsocketClientFactory.node_handle = self        
 
         ##################################################

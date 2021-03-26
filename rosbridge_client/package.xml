@@ -23,7 +23,7 @@
   <exec_depend>rosbridge_msgs</exec_depend>
   <exec_depend>rosapi</exec_depend>
   <exec_depend>rosauth</exec_depend>
-  <exec_depend>diagnostic_updater</exec_depend>
+  <!-- <exec_depend>diagnostic_updater</exec_depend> -->
   <!-- <exec_depend>python-ws4py</exec_depend> -->
 
   <export>
