@@ -140,7 +140,7 @@ class RosbridgeWebSocketClient(WebSocketClientProtocol):
             cls.node_handle.get_logger().info("Received binary data: {0} bytes".format(len(payload)))          
         else:
             # print("Text message received: {0}".format(payload.decode('utf8')))
-            cls.node_handle.get_logger().info("received: (%s)" % str(payload))            
+            # cls.node_handle.get_logger().info("received: (%s)" % str(payload))            
             try:
                 self.protocol.incoming(payload.decode('utf8',"ignore"))
             except Exception as e:
