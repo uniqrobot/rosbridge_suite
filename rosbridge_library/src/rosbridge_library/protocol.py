@@ -130,6 +130,7 @@ class Protocol:
             msg = self.deserialize(self.buffer)
             self.buffer = ""
             self.node_handle.get_logger().info(message_string)
+            # time.sleep(0.0001)
           
         # if loading whole object fails try to load part of it (from first opening bracket "{" to next closing bracket "}"
         # .. this causes Exceptions on "inner" closing brackets --> so I suppressed logging of deserialization errors
